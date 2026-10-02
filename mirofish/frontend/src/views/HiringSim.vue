@@ -11,17 +11,26 @@
       <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'profiles'" />
       <ProfileStep v-else-if="step === 'profiles'" :profiles="profiles" @back="step = 'scenario'" @next="step = 'review'" />
       <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="selectedProfiles" @back="step = 'profiles'" @start="start" />
+      <div v-else class="run">
+        <FeedStep
+          :stage="stage" :error="error" :agents="agents" :feed="feed" :highlight-key="highlightKey"
+          @retry="execute" @restart="restart"
+        />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
 import ProfileStep from '../components/hiring/ProfileStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
-import { DISCLAIMER } from '../lib/hiringSim'
+import FeedStep from '../components/hiring/FeedStep.vue'
+import { runPipeline } from '../api/hiringSim'
+import { getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
+import { DISCLAIMER, buildFeed } from '../lib/hiringSim'
 import { DEMO_SCENARIO, DEFAULT_PROFILES } from '../data/defaultProfiles'
 
 const router = useRouter()
@@ -36,9 +45,78 @@ const scenario = reactive({ ...DEMO_SCENARIO })
 const profiles = ref(DEFAULT_PROFILES.map(p => ({ ...p, selected: true, custom: false })))
 const selectedProfiles = computed(() => profiles.value.filter(p => p.selected))
 
-const start = () => {
-  step.value = 'run' // replaced by the real pipeline run in Task 5
+const stage = ref('')
+const error = ref('')
+const markdown = ref('')
+const feed = ref([])
+const agents = ref([])
+const highlightKey = ref('')
+
+let pipeline = {} // resume state that runPipeline fills in
+let controller = null
+let feedTimer = null
+
+const refreshFeed = async () => {
+  const id = pipeline.simulationId
+  if (!id) return
+  const [posts, comments, actions] = await Promise.all([
+    getSimulationPosts(id, 'reddit', 200, 0),
+    getSimulationComments(id, 'reddit', 500, 0),
+    getSimulationActions(id, { platform: 'reddit', limit: 1000 })
+  ])
+  feed.value = buildFeed(posts.data.posts, comments.data.comments, actions.data.actions, agents.value)
 }
+const stopFeedPolling = () => clearInterval(feedTimer)
+const startFeedPolling = () => {
+  stopFeedPolling()
+  refreshFeed().catch(() => {})
+  feedTimer = setInterval(() => refreshFeed().catch(() => {}), 3000)
+}
+
+const onStage = async (s) => {
+  stage.value = s
+  if (s === 'run') {
+    agents.value = await getSimulationProfiles(pipeline.simulationId, 'reddit').then(r => r.data.profiles).catch(() => [])
+    startFeedPolling()
+  }
+}
+
+const execute = async () => {
+  error.value = ''
+  controller = new AbortController()
+  try {
+    const out = await runPipeline({
+      scenario, profiles: selectedProfiles.value, state: pipeline, signal: controller.signal, onStage
+    })
+    await refreshFeed()
+    markdown.value = out.markdown
+    stage.value = 'done'
+  } catch (e) {
+    if (!controller.signal.aborted) error.value = e.message
+  } finally {
+    stopFeedPolling()
+  }
+}
+
+const start = () => {
+  step.value = 'run'
+  return execute()
+}
+
+const restart = () => {
+  pipeline = {}
+  stage.value = ''
+  error.value = ''
+  markdown.value = ''
+  feed.value = []
+  agents.value = []
+  step.value = 'scenario'
+}
+
+onUnmounted(() => {
+  controller?.abort()
+  stopFeedPolling()
+})
 </script>
 
 <style>
