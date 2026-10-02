@@ -41,7 +41,7 @@ def test_profile_construction_is_the_single_normalization_boundary():
     assert profile.persona == "详细人设"
     assert profile.gender == "female"
     assert profile.mbti == "INTJ"
-    assert profile.country == "中国"
+    assert profile.country == "United States"  # the country is fixed, whatever the model wrote
     assert profile.profession == "研究员"
     assert profile.interested_topics == ["AI", "政策", "社会"]
     assert "None" not in json.dumps(profile.to_dict(), ensure_ascii=False)
@@ -74,3 +74,42 @@ def test_normalized_profile_serializes_to_twitter_and_reddit(tmp_path):
     assert reddit["persona"] == "详细, 人设"
     assert reddit["mbti"] == "ENFP"
     assert reddit["interested_topics"] == ["AI", "政策"]
+
+
+def _profile(country):
+    return OasisAgentProfile(
+        user_id=1, user_name="agent", name="Agent", bio="b", persona="p", country=country
+    )
+
+
+def test_every_profile_is_placed_in_the_united_states():
+    for given in ["中国", "South Korea", {"name": "Japan"}, "", None]:
+        assert _profile(given).country == "United States"
+
+
+def test_the_country_is_united_states_in_every_exported_format(tmp_path):
+    profile = _profile("中国")
+    generator = object.__new__(OasisProfileGenerator)
+    reddit_path = tmp_path / "reddit.json"
+
+    generator._save_reddit_json([profile], str(reddit_path))
+
+    assert profile.to_dict()["country"] == "United States"
+    assert profile.to_reddit_format()["country"] == "United States"
+    assert profile.to_twitter_format()["country"] == "United States"
+    assert json.loads(reddit_path.read_text(encoding="utf-8"))[0]["country"] == "United States"
+    # the Twitter CSV has no country column at all, so there is nothing in it to fix
+
+
+def test_fallback_profiles_are_also_in_the_united_states():
+    generator = object.__new__(OasisProfileGenerator)
+    for entity_type in ["Student", "Expert", "MediaOutlet", "University", "SomethingElse"]:
+        data = generator._generate_profile_rule_based("Name", entity_type, "summary", {})
+        assert data["country"] == "United States", entity_type
+
+
+def test_the_model_is_told_the_country_instead_of_asked_for_it_in_chinese():
+    from app.services import oasis_profile_generator as module
+
+    text = open(module.__file__, encoding="utf-8").read()
+    assert "使用中文，如\"中国\"" not in text
