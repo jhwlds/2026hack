@@ -1,7 +1,7 @@
 <template>
   <div class="sim">
     <header class="top">
-      <span class="brand" @click="router.push('/')">MIROFISH · 채용 정책 반응 시뮬레이터</span>
+      <span class="brand">Hiring Policy Reaction Simulator</span>
       <span class="steps">
         <span v-for="(s, i) in STEPS" :key="s.id" :class="{ on: step === s.id }">{{ i + 1 }}. {{ s.label }}</span>
       </span>
@@ -22,8 +22,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import i18n from '../i18n'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
 import FeedStep from '../components/hiring/FeedStep.vue'
@@ -33,11 +33,10 @@ import { getSimulationPosts, getSimulationComments, getSimulationActions, getSim
 import { DISCLAIMER, buildFeed } from '../lib/hiringSim'
 import { DEMO_SCENARIO, DEFAULT_PROFILES } from '../data/defaultProfiles'
 
-const router = useRouter()
 const STEPS = [
-  { id: 'scenario', label: '시나리오' },
-  { id: 'review', label: '실행 전 확인' },
-  { id: 'run', label: '피드·리포트' }
+  { id: 'scenario', label: 'Scenario' },
+  { id: 'review', label: 'Review' },
+  { id: 'run', label: 'Feed & report' }
 ]
 const step = ref('scenario')
 const scenario = reactive({ ...DEMO_SCENARIO })
@@ -116,7 +115,19 @@ const restart = () => {
   step.value = 'scenario'
 }
 
+// The backend answers in the language of the Accept-Language header (default zh); this page is English.
+let previousLocale = ''
+let previousTitle = ''
+onMounted(() => {
+  previousLocale = i18n.global.locale.value
+  i18n.global.locale.value = 'en'
+  previousTitle = document.title
+  document.title = 'Hiring Policy Reaction Simulator'
+})
+
 onUnmounted(() => {
+  i18n.global.locale.value = previousLocale || i18n.global.locale.value
+  document.title = previousTitle || document.title
   controller?.abort()
   stopFeedPolling()
 })
@@ -125,7 +136,7 @@ onUnmounted(() => {
 <style>
 .sim { min-height: 100vh; display: flex; flex-direction: column; }
 .sim .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 2px solid #000; flex-wrap: wrap; }
-.sim .brand { font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+.sim .brand { font-weight: 700; letter-spacing: 1px; }
 .sim .steps { display: flex; gap: 16px; font-size: 13px; color: #888; flex-wrap: wrap; }
 .sim .steps .on { color: #000; font-weight: 700; border-bottom: 2px solid #000; }
 .sim .banner { position: sticky; top: 0; z-index: 10; background: #000; color: #fff; padding: 8px 24px; font-size: 13px; text-align: center; }

@@ -5,7 +5,7 @@ import {
 import { generateReport, getReport } from './report'
 import { buildSeedDoc, buildRequirement, pollUntil, MAX_ROUNDS } from '../lib/hiringSim'
 
-const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || '작업이 실패했습니다.')
+const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || 'The task failed.')
 
 // Fills `state` as it goes, so calling again with the same state after a failure skips the finished stages.
 export async function runPipeline({ scenario, profiles, state, signal, onStage, maxRounds = MAX_ROUNDS }) {
@@ -65,7 +65,7 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage, 
     await poll(
       () => getRunStatus(state.simulationId),
       r => ['completed', 'stopped'].includes(r.data.runner_status),
-      r => r.data.runner_status === 'failed' && (r.data.error || '시뮬레이션이 실패했습니다.'),
+      r => r.data.runner_status === 'failed' && (r.data.error || 'The simulation failed.'),
       3000
     )
   } catch (e) {
@@ -79,7 +79,7 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage, 
     const done = await poll(
       () => getReport(state.reportId),
       r => r.data.status === 'completed',
-      r => r.data.status === 'failed' && (r.data.error || '리포트 생성이 실패했습니다.'),
+      r => r.data.status === 'failed' && (r.data.error || 'Report generation failed.'),
       3000
     )
     return { markdown: done.data.markdown_content }

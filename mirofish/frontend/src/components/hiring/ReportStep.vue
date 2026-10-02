@@ -1,13 +1,13 @@
 <template>
   <section class="report">
-    <h2>리포트</h2>
+    <h2>Report</h2>
     <p class="scope">{{ REPORT_SCOPE_NOTE }} {{ DISCLAIMER }}</p>
     <template v-for="(b, i) in blocks" :key="i">
       <component :is="`h${Math.min(b.level + 2, 5)}`" v-if="b.type === 'heading'">{{ b.text }}</component>
       <blockquote v-else-if="b.type === 'quote'">
         {{ b.text }}
-        <button v-if="b.key" class="link" @click="$emit('jump', b.key)">원문 보기</button>
-        <span v-else class="miss">원문 미확인</span>
+        <button v-if="b.key" class="link" @click="$emit('jump', b.key)">View source</button>
+        <span v-else class="miss">Source not found</span>
       </blockquote>
       <p v-else-if="b.type === 'item'">• {{ b.text }}</p>
       <p v-else>{{ b.text }}</p>

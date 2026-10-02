@@ -1,48 +1,48 @@
 export const MAX_ROUNDS = 6
-export const DISCLAIMER = '가상 시뮬레이션 — 실제 지원자 데이터나 예측이 아님'
-export const REPORT_SCOPE_NOTE = '이 프로필 구성과 이번 실행에 한정된 정성적 결과입니다.'
+export const DISCLAIMER = 'Simulated scenario — not real applicant data or a prediction'
+export const REPORT_SCOPE_NOTE = 'Qualitative results limited to this applicant set and this run.'
 export const STAGE_LABELS = {
-  ontology: '시나리오 분석',
-  graph: '그래프 구축',
-  prepare: '에이전트 생성',
-  run: '시뮬레이션 실행',
-  report: '리포트 생성'
+  ontology: 'Analyzing scenario',
+  graph: 'Building graph',
+  prepare: 'Creating agents',
+  run: 'Running simulation',
+  report: 'Generating report'
 }
 
-const SCENARIO_FIELDS = { role: '직무/레벨', policy: '채용 정책', details: '정책 세부사항', question: '시뮬레이션 질문' }
+const SCENARIO_FIELDS = { role: 'Role / level', policy: 'Hiring policy', details: 'Policy details', question: 'Simulation question' }
 
 export function validateScenario(scenario) {
   return Object.entries(SCENARIO_FIELDS)
     .filter(([key]) => !String(scenario[key] || '').trim())
-    .map(([, label]) => `${label}을(를) 입력해 주세요.`)
+    .map(([, label]) => `${label} is required.`)
 }
 
 export function buildSeedDoc(s, profiles) {
   const lines = [
-    '# 채용 정책 시나리오 (가상 시뮬레이션용)', '',
-    '## 직무/레벨', s.role.trim(), '',
-    '## 채용 정책', s.policy.trim(), '',
-    '## 정책 세부사항', s.details.trim(), ''
+    '# Hiring policy scenario (for a simulated community)', '',
+    '## Role / level', s.role.trim(), '',
+    '## Hiring policy', s.policy.trim(), '',
+    '## Policy details', s.details.trim(), ''
   ]
-  if (s.context?.trim()) lines.push('## 회사/채용 배경', s.context.trim(), '')
-  lines.push('## 토론에 참여하는 개인 구직자들', '다음은 이 정책에 대해 토론하는 가상의 개인 구직자들이다.', '')
+  if (s.context?.trim()) lines.push('## Company / hiring context', s.context.trim(), '')
+  lines.push('## Individual job seekers taking part in the discussion', 'The following are fictional individual job seekers discussing this policy.', '')
   // One named individual per profile, as a sentence rather than a heading, so the graph builder
   // extracts people instead of treating the profile title as an organization.
   for (const p of profiles) {
-    lines.push(`- 개인 구직자 ${p.name}(가명). 상황 유형: ${p.title}. ${p.description} 핵심 우선순위: ${p.priorities}`)
+    lines.push(`- Individual job seeker ${p.name} (pseudonym). Situation: ${p.title}. ${p.description} Top priorities: ${p.priorities}`)
   }
   return lines.join('\n') + '\n'
 }
 
 export function buildRequirement(s) {
   return [
-    `가상의 구직자 커뮤니티에서 다음 채용 정책에 대한 반응과 토론을 시뮬레이션한다: ${s.policy.trim()}.`,
-    `시뮬레이션 질문: ${s.question.trim()}`,
-    '시뮬레이션에 참여하는 에이전트는 시나리오 문서에 적힌 개인 구직자들이며, 정책·회사·커뮤니티 같은 조직이나 개념은 에이전트가 아니다.',
-    '각 구직자는 정책을 보고 초기 의견을 게시한 뒤 다른 구직자의 글에 답하거나 동의·반박한다.',
-    '리포트는 다음 섹션으로 구성한다: 핵심 요약, 반복해서 나온 우려와 긍정 반응, 다른 에이전트의 반응 이후 강화되거나 바뀐 논점, 관점이 갈린 부분, 회사가 검토할 만한 개선안.',
-    '각 섹션의 주장마다 시뮬레이션 대화에서 가져온 원문 발췌를 인용 블록(> "...")으로 첨부한다.',
-    '결과는 가상 에이전트의 정성적 분석이며 실제 지원자 모집단이나 통계 비율로 표현하지 않는다.'
+    `Simulate how a community of fictional job seekers reacts to and discusses this hiring policy: ${s.policy.trim()}.`,
+    `Simulation question: ${s.question.trim()}`,
+    'The agents are the individual job seekers described in the scenario document; organizations or concepts such as the policy, the company or the community are not agents.',
+    "Each job seeker posts an initial opinion after seeing the policy, then replies to, agrees with or pushes back on other job seekers' posts.",
+    'Structure the report with these sections: Key summary; Recurring concerns and positive reactions; Points that strengthened or changed after other agents reacted; Where perspectives split; Improvements the company could consider.',
+    'For every claim, attach a verbatim excerpt from the simulated conversation as a quote block (> "...").',
+    'The results are a qualitative analysis of fictional agents and must not be presented as a real applicant population or as statistical proportions.'
   ].join('\n')
 }
 
@@ -93,7 +93,7 @@ export function buildFeed(posts, comments, actions = [], profiles = []) {
     const a = authors.get(norm(row.content))
     return a
       ? { name: a.agent_name, label: labelOf(a.agent_id), round: a.round_num }
-      : { name: `에이전트 ${row.user_id}`, label: '', round: null }
+      : { name: `Agent ${row.user_id}`, label: '', round: null }
   }
 
   const feed = []
