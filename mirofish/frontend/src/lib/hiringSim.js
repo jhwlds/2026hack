@@ -17,6 +17,24 @@ export function validateScenario(scenario) {
     .map(([, label]) => `${label} is required.`)
 }
 
+const ALLOWED_EXTENSIONS = ['pdf', 'md', 'txt', 'markdown'] // mirrors the backend's Config.ALLOWED_EXTENSIONS
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // mirrors the backend's MAX_CONTENT_LENGTH
+
+export function validateFiles(files) {
+  const errors = files
+    .filter(f => !ALLOWED_EXTENSIONS.includes(f.name.split('.').pop().toLowerCase()) || !f.name.includes('.'))
+    .map(f => `${f.name}: only PDF, MD, TXT and MARKDOWN files are supported.`)
+  if (files.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_BYTES) errors.push('The files are larger than 50 MB in total.')
+  return errors
+}
+
+// Applicant agents are the entities whose type name ends in "JobSeeker" (the requirement text asks for that naming).
+// Returning undefined tells /prepare not to filter, which is the safe fallback when the model ignored the naming.
+export function pickApplicantTypes(ontology) {
+  const names = (ontology?.entity_types || []).map(t => t.name).filter(n => n.endsWith('JobSeeker'))
+  return names.length ? names : undefined
+}
+
 export function buildSeedDoc(s, profiles) {
   const lines = [
     '# Hiring policy scenario (for a simulated community)', '',
@@ -39,6 +57,7 @@ export function buildRequirement(s) {
     `Simulate how a community of fictional job seekers reacts to and discusses this hiring policy: ${s.policy.trim()}.`,
     `Simulation question: ${s.question.trim()}`,
     'The agents are the individual job seekers described in the scenario document; organizations or concepts such as the policy, the company or the community are not agents.',
+    "Name every entity type that represents an individual job seeker with a type name ending in 'JobSeeker' (for example JobSeeker), and give no other entity type such a name.",
     "Each job seeker posts an initial opinion after seeing the policy, then replies to, agrees with or pushes back on other job seekers' posts.",
     'Structure the report with these sections: Key summary; Recurring concerns and positive reactions; Points that strengthened or changed after other agents reacted; Where perspectives split; Improvements the company could consider.',
     'For every claim, attach a verbatim excerpt from the simulated conversation as a quote block (> "...").',

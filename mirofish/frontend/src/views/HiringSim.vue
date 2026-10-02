@@ -8,8 +8,8 @@
     </header>
     <div class="banner" role="note">{{ DISCLAIMER }}</div>
     <main>
-      <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'review'" />
-      <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="DEFAULT_PROFILES" @back="step = 'scenario'" @start="start" />
+      <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" :files="files" @next="step = 'review'" />
+      <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="DEFAULT_PROFILES" :files="files" @back="step = 'scenario'" @start="start" />
       <div v-else class="run">
         <FeedStep
           :stage="stage" :error="error" :agents="agents" :feed="feed" :highlight-key="highlightKey"
@@ -40,6 +40,7 @@ const STEPS = [
 ]
 const step = ref('scenario')
 const scenario = reactive({ ...DEMO_SCENARIO })
+const files = ref([]) // optional company context files (job posting etc.)
 
 const stage = ref('')
 const error = ref('')
@@ -82,7 +83,7 @@ const execute = async () => {
   controller = new AbortController()
   try {
     const out = await runPipeline({
-      scenario, profiles: DEFAULT_PROFILES, state: pipeline, signal: controller.signal, onStage
+      scenario, profiles: DEFAULT_PROFILES, files: files.value, state: pipeline, signal: controller.signal, onStage
     })
     await refreshFeed()
     markdown.value = out.markdown
@@ -177,6 +178,9 @@ onUnmounted(() => {
 .sim .profile-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .sim .profile-head input[type='text'] { flex: 1; font: inherit; border: 1px solid #000; padding: 6px; }
 .sim dl { font-size: 13px; }
+.sim .files { list-style: none; font-weight: 400; margin-top: 4px; }
+.sim .files li { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.sim .files .btn { padding: 2px 8px; font-size: 11px; }
 .sim dt { font-weight: 700; margin-top: 10px; }
 .sim dd { margin: 2px 0 0; white-space: pre-wrap; }
 </style>

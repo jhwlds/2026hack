@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  validateScenario, buildSeedDoc, buildRequirement,
+  validateScenario, validateFiles, pickApplicantTypes, buildSeedDoc, buildRequirement,
   parseReport, matchEvidence, buildFeed, pollUntil
 } from './hiringSim.js'
 
@@ -29,6 +29,25 @@ assert.ok(buildSeedDoc({ ...scenario, context: 'A startup' }, profiles).includes
 const req = buildRequirement(scenario)
 assert.ok(req.includes(scenario.question) && req.includes('Key summary') && req.includes('Improvements'))
 assert.ok(req.includes('organizations or concepts such as the policy'))
+// the applicant entity types must be recognizable by name so /prepare can be limited to them
+assert.ok(req.includes("ending in 'JobSeeker'"))
+
+// validateFiles: allowed extensions only, 50 MB total, no files is fine
+assert.deepEqual(validateFiles([]), [])
+assert.deepEqual(validateFiles([{ name: 'Posting.PDF', size: 1000 }, { name: 'a.md', size: 5 }, { name: 'b.markdown', size: 5 }, { name: 'c.txt', size: 5 }]), [])
+assert.equal(validateFiles([{ name: 'posting.docx', size: 10 }]).length, 1)
+assert.ok(validateFiles([{ name: 'posting.docx', size: 10 }])[0].includes('posting.docx'))
+assert.equal(validateFiles([{ name: 'noextension', size: 10 }]).length, 1)
+assert.equal(validateFiles([{ name: 'a.pdf', size: 30 * 1024 * 1024 }, { name: 'b.pdf', size: 30 * 1024 * 1024 }]).length, 1)
+
+// pickApplicantTypes: only entity types ending in JobSeeker; undefined means "do not filter"
+assert.deepEqual(
+  pickApplicantTypes({ entity_types: [{ name: 'JobSeeker' }, { name: 'EvaluationCriteriaFocusedJobSeeker' }, { name: 'Company' }, { name: 'Person' }] }),
+  ['JobSeeker', 'EvaluationCriteriaFocusedJobSeeker']
+)
+assert.equal(pickApplicantTypes({ entity_types: [{ name: 'Company' }, { name: 'Person' }] }), undefined)
+assert.equal(pickApplicantTypes({ entity_types: [] }), undefined)
+assert.equal(pickApplicantTypes(undefined), undefined)
 
 // parseReport: block types, empty quotes dropped, ** stripped, raw HTML kept as plain text
 const blocks = parseReport('# Title\n\nText **bold**\n>\n> "A quote that is long enough"\n- item\n<script>alert(1)</script>')

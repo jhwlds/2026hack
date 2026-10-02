@@ -3,21 +3,24 @@ import {
   createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus
 } from './simulation'
 import { generateReport, getReport } from './report'
-import { buildSeedDoc, buildRequirement, pollUntil, MAX_ROUNDS } from '../lib/hiringSim'
+import { buildSeedDoc, buildRequirement, pickApplicantTypes, pollUntil, MAX_ROUNDS } from '../lib/hiringSim'
 
 const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || 'The task failed.')
 
 // Fills `state` as it goes, so calling again with the same state after a failure skips the finished stages.
-export async function runPipeline({ scenario, profiles, state, signal, onStage, maxRounds = MAX_ROUNDS }) {
+export async function runPipeline({ scenario, profiles, files = [], state, signal, onStage, maxRounds = MAX_ROUNDS }) {
   const poll = (fn, isDone, isFailed, intervalMs = 2000) => pollUntil(fn, { isDone, isFailed, intervalMs, signal })
 
   if (!state.projectId) {
     await onStage('ontology')
     const form = new FormData()
     form.append('files', new Blob([buildSeedDoc(scenario, profiles)], { type: 'text/markdown' }), 'scenario.md')
+    for (const f of files) form.append('files', f, f.name) // the user's company context, e.g. a job posting
     form.append('simulation_requirement', buildRequirement(scenario))
     form.append('project_name', `hiring-sim: ${scenario.policy.trim().slice(0, 30)}`)
-    state.projectId = (await generateOntology(form)).data.project_id
+    const ontology = (await generateOntology(form)).data
+    state.projectId = ontology.project_id
+    state.applicantTypes = pickApplicantTypes(ontology.ontology)
   }
 
   if (!state.graphId) {
@@ -37,6 +40,7 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage, 
     })).data.simulation_id
     const prep = await prepareSimulation({
       simulation_id: state.simulationId,
+      entity_types: state.applicantTypes, // undefined (omitted from the JSON) means no filtering
       use_llm_for_profiles: true,
       parallel_profile_count: 5
     })

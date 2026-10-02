@@ -10,6 +10,9 @@
         <template v-if="scenario.context"><dt>Context</dt><dd>{{ scenario.context }}</dd></template>
       </dl>
     </div>
+    <div v-if="files.length" class="card">
+      <dl><dt>Company context files</dt><dd>{{ files.map(f => f.name).join(', ') }}</dd></dl>
+    </div>
     <p class="scope">The fictional applicants below are applied automatically. They describe job-search situations and constraints only and do not represent any group.</p>
     <div class="card">
       <dl>
@@ -35,7 +38,8 @@ import { MAX_ROUNDS } from '../../lib/hiringSim'
 
 defineProps({
   scenario: { type: Object, required: true },
-  profiles: { type: Array, required: true }
+  profiles: { type: Array, required: true },
+  files: { type: Array, default: () => [] }
 })
 defineEmits(['back', 'start'])
 </script>
