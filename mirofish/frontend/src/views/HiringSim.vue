@@ -11,11 +11,19 @@
       <ScenarioStep v-if="step === 'scenario'" :state="input" @next="step = 'review'" />
       <ReviewStep v-else-if="step === 'review'" :state="input" @back="step = 'scenario'" @start="start" />
       <div v-else class="run">
+        <div class="graph-wrap">
+          <GraphPanel
+            :graph-data="graphData" :loading="graphLoading" :current-phase="stage === 'done' ? 4 : 3"
+            :is-simulating="stage === 'run'" @refresh="loadGraph"
+          />
+        </div>
+        <div class="run-main">
         <FeedStep
           :stage="stage" :error="error" :agents="agents" :timeline="timeline" :highlight-key="highlightKey"
           @retry="execute" @restart="restart"
         />
         <ReportStep v-if="markdown" :markdown="markdown" :timeline="timeline" @jump="jump" />
+        </div>
       </div>
     </main>
   </div>
@@ -27,8 +35,10 @@ import i18n from '../i18n'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
 import FeedStep from '../components/hiring/FeedStep.vue'
+import GraphPanel from '../components/GraphPanel.vue'
 import ReportStep from '../components/hiring/ReportStep.vue'
 import { runPipeline } from '../api/hiringSim'
+import { getGraphData } from '../api/graph'
 import { getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
 import { DISCLAIMER, DEMO_REQUIREMENT, buildTimeline } from '../lib/hiringSim'
 
@@ -46,10 +56,13 @@ const markdown = ref('')
 const timeline = ref([])
 const agents = ref([])
 const highlightKey = ref('')
+const graphData = ref(null)
+const graphLoading = ref(false)
 
 let pipeline = {} // resume state that runPipeline fills in
 let controller = null
 let feedTimer = null
+let graphTimer = null
 
 const refreshFeed = async () => {
   const id = pipeline.simulationId
@@ -63,15 +76,32 @@ const refreshFeed = async () => {
     posts: posts.data.posts, comments: comments.data.comments, profiles: agents.value
   })
 }
-const stopFeedPolling = () => clearInterval(feedTimer)
+// The entity graph the agents come from; it also grows during the run because activity is written back to it.
+const loadGraph = async () => {
+  if (!pipeline.graphId) return
+  graphLoading.value = true
+  try {
+    graphData.value = (await getGraphData(pipeline.graphId)).data
+  } catch (e) {
+    console.warn('Graph load failed:', e.message)
+  } finally {
+    graphLoading.value = false
+  }
+}
+const stopFeedPolling = () => {
+  clearInterval(feedTimer)
+  clearInterval(graphTimer)
+}
 const startFeedPolling = () => {
   stopFeedPolling()
   refreshFeed().catch(() => {})
   feedTimer = setInterval(() => refreshFeed().catch(() => {}), 3000)
+  graphTimer = setInterval(loadGraph, 15000)
 }
 
 const onStage = async (s) => {
   stage.value = s
+  if (pipeline.graphId && !graphData.value) loadGraph()
   if (s === 'run') {
     agents.value = await getSimulationProfiles(pipeline.simulationId, 'reddit').then(r => r.data.profiles).catch(() => [])
     startFeedPolling()
@@ -85,7 +115,7 @@ const execute = async () => {
     const out = await runPipeline({
       requirement: input.requirement, file: input.file, state: pipeline, signal: controller.signal, onStage
     })
-    await refreshFeed()
+    await Promise.all([refreshFeed(), loadGraph()])
     markdown.value = out.markdown
     stage.value = 'done'
   } catch (e) {
@@ -113,6 +143,7 @@ const restart = () => {
   markdown.value = ''
   timeline.value = []
   agents.value = []
+  graphData.value = null
   step.value = 'scenario'
 }
 
@@ -159,7 +190,9 @@ onUnmounted(() => {
 .sim .agents { border: 1px solid #000; padding: 10px; margin-bottom: 16px; font-size: 13px; }
 .sim .agents li { margin: 4px 0 4px 18px; }
 .sim .run { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
-@media (max-width: 900px) { .sim .run { grid-template-columns: 1fr; } }
+.sim .graph-wrap { position: sticky; top: 48px; height: calc(100vh - 72px); min-height: 420px; border: 2px solid #000; }
+.sim .run-main { min-width: 0; }
+@media (max-width: 900px) { .sim .run { grid-template-columns: 1fr; } .sim .graph-wrap { position: relative; top: 0; height: 420px; } }
 .sim .post { border: 1px solid #000; padding: 10px; margin-bottom: 12px; font-size: 13px; }
 .sim .post.hl, .sim .comment.hl { outline: 3px solid #000; background: #f1f1f1; }
 .sim .post header, .sim .comment header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
