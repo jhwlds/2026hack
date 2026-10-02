@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  validateInput, pickApplicantTypes, buildRequirement,
+  validateInput, pickApplicantTypes, buildRequirement, runPhase,
   parseReport, matchEvidence, buildFeed, pollUntil
 } from './hiringSim.js'
 
@@ -26,6 +26,17 @@ assert.ok(req.includes('organizations or concepts such as the policy'))
 // the applicant entity types must be recognizable by name so /prepare can be limited to them
 assert.ok(req.includes("ending in 'JobSeeker'"))
 assert.ok(req.includes('verbatim excerpt'))
+
+// runPhase: the parallel runner keeps its process alive in a wait-for-commands mode after both platforms finish,
+// so the run only reaches 'completed' once the environment is closed
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: false, twitter_completed: false }), 'running')
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: true, twitter_completed: false }), 'running')
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: true, twitter_completed: true }), 'closing')
+assert.equal(runPhase({ runner_status: 'stopping', reddit_completed: true, twitter_completed: true }), 'stopping')
+assert.equal(runPhase({ runner_status: 'completed' }), 'done')
+assert.equal(runPhase({ runner_status: 'stopped' }), 'done')
+assert.equal(runPhase({ runner_status: 'failed', error: 'boom' }), 'failed')
+assert.equal(runPhase({ runner_status: 'idle' }), 'running')
 
 // pickApplicantTypes: only entity types ending in JobSeeker; undefined means "do not filter"
 assert.deepEqual(

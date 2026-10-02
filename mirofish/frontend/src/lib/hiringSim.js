@@ -25,6 +25,15 @@ export function validateInput(requirement, file) {
   return errors
 }
 
+// Where a run is, from /run-status data. After both platforms finish, the parallel runner keeps its process alive
+// waiting for interview commands, so the run stays "running" until the environment is closed: that is 'closing'.
+export function runPhase(data) {
+  if (data.runner_status === 'failed') return 'failed'
+  if (['completed', 'stopped'].includes(data.runner_status)) return 'done'
+  if (data.runner_status === 'stopping') return 'stopping'
+  return data.reddit_completed && data.twitter_completed ? 'closing' : 'running'
+}
+
 // Applicant agents are the entities whose type name ends in "JobSeeker" (the requirement text asks for that naming).
 // Returning undefined tells /prepare not to filter, which is the safe fallback when the model ignored the naming.
 export function pickApplicantTypes(ontology) {

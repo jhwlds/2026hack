@@ -51,6 +51,8 @@ PRD에서 **의도적으로 뺀 것**: 지원자 프로필의 선택·수정·�
 - 단계 실패 시 실패한 단계 이름과 백엔드 에러 메시지를 보여 주고 해당 단계부터 재시도할 수 있다.
 - 폴링 타이머는 컴포넌트 unmount 시 정리한다.
 - 리포트 완료 여부는 `getReport`를 폴링해 `status`로 판단한다(`api/report.js`의 `getReportStatus`는 백엔드 POST 라우트와 메서드가 달라 쓰지 않는다).
+- 두 플랫폼이 끝나도 병렬 러너 프로세스는 인터뷰 명령을 기다리며 살아 있어 상태가 `running`으로 남는다. `runPhase`가 이 상태를 `closing`으로 판별하면 `close-env`를 보내 환경을 닫고, `stopping`을 거쳐 `completed`가 될 때까지 폴링한다.
+- 리포트는 생성이 끝나 저장되기 전에는 `GET /report/:id`가 404를 돌려주므로, 404일 때는 `/report/:id/progress`로 상태를 확인하고(없으면 pending), `completed`이고 본문이 있을 때 끝난 것으로 본다.
 - 시뮬레이션은 `parallel` 러너로 시작하고(`enable_twitter`/`enable_reddit` 모두 true) 피드는 `reddit` 쪽만 읽는다. 단일 플랫폼 러너는 완료 감지에 쓰이는 `actions.jsonl`을 쓰지 않아 끝나도 `running`으로 남기 때문이다.
 
 ## 6. 피드

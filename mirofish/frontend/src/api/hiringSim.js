@@ -1,9 +1,9 @@
 import { generateOntology, buildGraph, getTaskStatus, getProject } from './graph'
 import {
-  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus
+  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus, closeSimulationEnv
 } from './simulation'
-import { generateReport, getReport } from './report'
-import { buildRequirement, pickApplicantTypes, pollUntil, MAX_ROUNDS } from '../lib/hiringSim'
+import { generateReport, getReport, getReportProgress } from './report'
+import { buildRequirement, pickApplicantTypes, pollUntil, runPhase, MAX_ROUNDS } from '../lib/hiringSim'
 
 const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || 'The task failed.')
 
@@ -67,12 +67,18 @@ export async function runPipeline({ requirement, file, state, signal, onStage, m
       })
       state.started = true
     }
-    await poll(
+    const runFailed = r => runPhase(r.data) === 'failed' && (r.data.error || 'The simulation failed.')
+    const finished = await poll(
       () => getRunStatus(state.simulationId),
-      r => ['completed', 'stopped'].includes(r.data.runner_status),
-      r => r.data.runner_status === 'failed' && (r.data.error || 'The simulation failed.'),
+      r => ['closing', 'done'].includes(runPhase(r.data)),
+      runFailed,
       3000
     )
+    if (runPhase(finished.data) === 'closing') {
+      // Both platforms are done but the process waits for interview commands; closing the environment lets the run complete.
+      await closeSimulationEnv({ simulation_id: state.simulationId, timeout: 60 })
+      await poll(() => getRunStatus(state.simulationId), r => runPhase(r.data) === 'done', runFailed, 3000)
+    }
   } catch (e) {
     state.started = false // on retry, restart with force
     throw e
@@ -81,10 +87,19 @@ export async function runPipeline({ requirement, file, state, signal, onStage, m
   await onStage('report')
   try {
     state.reportId ||= (await generateReport({ simulation_id: state.simulationId })).data.report_id
+    // The report only exists (GET /report/:id) once generation has saved it; until then ask for its progress instead.
+    const reportInfo = async () => {
+      try {
+        return await getReport(state.reportId)
+      } catch (e) {
+        if (e.response?.status !== 404) throw e
+        return getReportProgress(state.reportId).catch(() => ({ data: { status: 'pending' } }))
+      }
+    }
     const done = await poll(
-      () => getReport(state.reportId),
-      r => r.data.status === 'completed',
-      r => r.data.status === 'failed' && (r.data.error || 'Report generation failed.'),
+      reportInfo,
+      r => r.data.status === 'completed' && !!r.data.markdown_content,
+      r => r.data.status === 'failed' && (r.data.error || r.data.message || 'Report generation failed.'),
       3000
     )
     return { markdown: done.data.markdown_content }
