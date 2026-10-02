@@ -1,0 +1,79 @@
+<template>
+  <div class="sim">
+    <header class="top">
+      <span class="brand" @click="router.push('/')">MIROFISH · 채용 정책 반응 시뮬레이터</span>
+      <span class="steps">
+        <span v-for="(s, i) in STEPS" :key="s.id" :class="{ on: step === s.id }">{{ i + 1 }}. {{ s.label }}</span>
+      </span>
+    </header>
+    <div class="banner" role="note">{{ DISCLAIMER }}</div>
+    <main>
+      <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'profiles'" />
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import ScenarioStep from '../components/hiring/ScenarioStep.vue'
+import { DISCLAIMER } from '../lib/hiringSim'
+import { DEMO_SCENARIO } from '../data/defaultProfiles'
+
+const router = useRouter()
+const STEPS = [
+  { id: 'scenario', label: '시나리오' },
+  { id: 'profiles', label: '지원자 구성' },
+  { id: 'review', label: '실행 전 확인' },
+  { id: 'run', label: '피드·리포트' }
+]
+const step = ref('scenario')
+const scenario = reactive({ ...DEMO_SCENARIO })
+</script>
+
+<style>
+.sim { min-height: 100vh; display: flex; flex-direction: column; }
+.sim .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 2px solid #000; flex-wrap: wrap; }
+.sim .brand { font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+.sim .steps { display: flex; gap: 16px; font-size: 13px; color: #888; flex-wrap: wrap; }
+.sim .steps .on { color: #000; font-weight: 700; border-bottom: 2px solid #000; }
+.sim .banner { position: sticky; top: 0; z-index: 10; background: #000; color: #fff; padding: 8px 24px; font-size: 13px; text-align: center; }
+.sim main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px; }
+.sim h2 { font-size: 18px; margin-bottom: 16px; }
+.sim .card { border: 2px solid #000; padding: 16px; margin-bottom: 16px; }
+.sim .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+.sim .field input, .sim .field textarea { font: inherit; font-weight: 400; border: 1px solid #000; padding: 8px; background: #fff; }
+.sim .field textarea { min-height: 72px; resize: vertical; }
+.sim .actions { display: flex; gap: 12px; margin-top: 16px; }
+.sim .btn { font: inherit; border: 2px solid #000; background: #000; color: #fff; padding: 10px 18px; cursor: pointer; }
+.sim .btn.ghost { background: #fff; color: #000; }
+.sim .err { color: #b00020; font-size: 13px; margin-top: 8px; }
+.sim .progress { display: flex; gap: 8px; list-style: none; margin-bottom: 16px; flex-wrap: wrap; }
+.sim .progress li { border: 1px solid #000; padding: 6px 10px; font-size: 12px; color: #888; }
+.sim .progress li.done { background: #000; color: #fff; }
+.sim .progress li.active { border-width: 3px; color: #000; font-weight: 700; }
+.sim .failbox { border: 2px solid #b00020; padding: 12px; margin-bottom: 16px; }
+.sim .agents { border: 1px solid #000; padding: 10px; margin-bottom: 16px; font-size: 13px; }
+.sim .agents li { margin: 4px 0 4px 18px; }
+.sim .run { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .sim .run { grid-template-columns: 1fr; } }
+.sim .post { border: 1px solid #000; padding: 10px; margin-bottom: 12px; font-size: 13px; }
+.sim .post.hl, .sim .comment.hl { outline: 3px solid #000; background: #f1f1f1; }
+.sim .post header, .sim .comment header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.sim .tag { border: 1px solid #000; padding: 0 6px; font-size: 11px; }
+.sim .round { color: #888; font-size: 11px; }
+.sim .comment { border-left: 3px solid #000; margin: 8px 0 0 14px; padding: 6px 10px; }
+.sim .empty { color: #888; font-size: 13px; }
+.sim .scope { font-size: 12px; color: #555; margin-bottom: 12px; }
+.sim .report h3, .sim .report h4, .sim .report h5 { margin: 16px 0 6px; }
+.sim .report p { font-size: 13px; line-height: 1.6; margin-bottom: 6px; }
+.sim .report blockquote { border-left: 4px solid #000; background: #f6f6f6; padding: 8px 12px; margin: 6px 0; font-size: 13px; }
+.sim .report .link, .sim .report .miss { margin-left: 8px; font-size: 11px; }
+.sim .report .link { font: inherit; font-size: 11px; border: 1px solid #000; background: #fff; cursor: pointer; padding: 0 6px; }
+.sim .report .miss { color: #888; }
+.sim .profile-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.sim .profile-head input[type='text'] { flex: 1; font: inherit; border: 1px solid #000; padding: 6px; }
+.sim dl { font-size: 13px; }
+.sim dt { font-weight: 700; margin-top: 10px; }
+.sim dd { margin: 2px 0 0; white-space: pre-wrap; }
+</style>
