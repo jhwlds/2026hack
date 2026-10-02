@@ -4,13 +4,14 @@
     <ol class="progress">
       <li v-for="(label, key) in STAGE_LABELS" :key="key" :class="stageClass(key)">{{ label }}</li>
     </ol>
+    <p v-if="note" class="notice" role="status">{{ note }}</p>
     <div v-if="error" class="failbox" role="alert">
       <strong>{{ STAGE_LABELS[stage] || 'Loading the run' }} failed</strong>
       <p>{{ error }}</p>
       <button class="btn" @click="$emit('retry')">Retry</button>
     </div>
     <details v-if="agents.length" class="agents">
-      <summary>{{ agents.length }} fictional agents were created for this run (they may not match the default applicants)</summary>
+      <summary>{{ agents.length }} fictional agents were created for this run (they may not match the job seekers generated for your file)</summary>
       <ul>
         <li v-for="(a, i) in agents" :key="i"><b>{{ a.name }}</b> — {{ a.profession || a.bio }}</li>
       </ul>
@@ -29,6 +30,7 @@ import ActionTimeline from './ActionTimeline.vue'
 const props = defineProps({
   stage: { type: String, default: '' },
   error: { type: String, default: '' },
+  note: { type: String, default: '' },
   agents: { type: Array, default: () => [] },
   timeline: { type: Array, default: () => [] },
   highlightKey: { type: String, default: '' }

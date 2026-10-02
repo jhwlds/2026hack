@@ -7,11 +7,18 @@
         <span v-if="file" class="scope">{{ file.name }} ({{ Math.ceil(file.size / 1024) }} KB)</span>
         <span class="scope">
           A job posting or company description (PDF, MD, TXT). The entities in this file become the simulated world.
-          Four fictional job seekers are added automatically; individual job seekers you describe in the file take part too.
+          Fictional job seekers with personas are generated from this file and your question; individual job seekers you describe in the file take part too.
         </span>
       </div>
       <label class="field">Simulation requirement
         <textarea v-model="state.requirement" placeholder="What do you want to find out? e.g. What concerns will a 4-hour unpaid coding assignment cause?" />
+      </label>
+      <label class="field">Number of job seekers
+        <input v-model.number="state.applicantCount" type="number" :min="MIN_APPLICANTS" :max="MAX_APPLICANTS" step="1" />
+        <span class="scope">
+          How many fictional job seekers take part ({{ MIN_APPLICANTS }} to {{ MAX_APPLICANTS }}, default {{ DEFAULT_APPLICANT_COUNT }}).
+          More job seekers means a longer run and more model calls.
+        </span>
       </label>
       <p class="scope">Use fictional demo information only. Do not enter real personal data or sensitive hiring materials.</p>
       <p v-for="e in errors" :key="e" class="err">{{ e }}</p>
@@ -24,9 +31,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { validateInput } from '../../lib/hiringSim'
+import { validateInput, MIN_APPLICANTS, MAX_APPLICANTS, DEFAULT_APPLICANT_COUNT } from '../../lib/hiringSim'
 
-// state = { requirement: string, file: File | null }, owned by the page
+// state = { requirement: string, file: File | null, applicantCount: number }, owned by the page
 const props = defineProps({ state: { type: Object, required: true } })
 const emit = defineEmits(['next'])
 const file = ref(props.state.file)
@@ -36,7 +43,7 @@ const pick = (e) => {
   file.value = props.state.file = e.target.files[0] || null
 }
 const next = () => {
-  errors.value = validateInput(props.state.requirement, props.state.file)
+  errors.value = validateInput(props.state.requirement, props.state.file, props.state.applicantCount)
   if (!errors.value.length) emit('next')
 }
 </script>

@@ -207,3 +207,17 @@ export const getSimulationComments = (simulationId, platform, limit = 500, offse
 export const getGraphEntities = (graphId) => {
   return service.get(`/api/simulation/entities/${graphId}`)
 }
+
+/**
+ * Generate fictional job seekers (name, situation, persona) for an uploaded seed file
+ * @param {File} file - the world seed
+ * @param {string} requirement - the question the simulation will answer
+ * @param {number} count - how many job seekers to generate (2 to 8)
+ */
+export const suggestApplicants = (file, requirement, count) => {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  form.append('simulation_requirement', requirement)
+  form.append('count', String(count))
+  return service.post('/api/simulation/suggest-applicants', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+}

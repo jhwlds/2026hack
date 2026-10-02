@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  validateInput, pickApplicantTypes, countApplicants, APPLICANTS, buildApplicantsDoc, buildRequirement, runPhase,
+  validateInput, pickApplicantTypes, countApplicants, validateApplicants, fallbackApplicants, MIN_APPLICANTS, MAX_APPLICANTS, DEFAULT_APPLICANT_COUNT, APPLICANTS, STAGE_LABELS, buildApplicantsDoc, buildRequirement, runPhase,
   parseReport, dedupeReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
 } from './hiringSim.js'
 
@@ -17,6 +17,17 @@ assert.equal(validateInput('ok', { name: 'posting.docx', size: 10 }).length, 1)
 assert.ok(validateInput('ok', { name: 'posting.docx', size: 10 })[0].includes('posting.docx'))
 assert.equal(validateInput('ok', { name: 'noextension', size: 10 }).length, 1)
 assert.equal(validateInput('ok', { name: 'a.pdf', size: 51 * 1024 * 1024 }).length, 1)
+
+// the number of job seekers: optional, 2 to 8, default 4
+assert.deepEqual([MIN_APPLICANTS, DEFAULT_APPLICANT_COUNT, MAX_APPLICANTS], [2, 4, 8])
+assert.deepEqual(validateInput('ok', seed, 2), [])
+assert.deepEqual(validateInput('ok', seed, 8), [])
+assert.deepEqual(validateInput('ok', seed), []) // not given: the default is used
+assert.deepEqual(validateInput('ok', seed, undefined), [])
+for (const bad of [1, 9, 0, -1, 4.5, '4', '', NaN, null, true]) {
+  assert.deepEqual(validateInput('ok', seed, bad), ['The number of job seekers must be a whole number between 2 and 8.'], String(bad))
+}
+assert.equal(validateInput('', null, 99).length, 3) // the problems add up
 
 // buildRequirement: the user's own text comes first and is trimmed, then the fixed product instructions
 const req = buildRequirement('  What concerns will a 4-hour unpaid assignment cause?  ')
@@ -49,7 +60,10 @@ assert.equal(runPhase({ runner_status: 'idle' }), 'running')
 const doc = buildApplicantsDoc()
 assert.equal(APPLICANTS.length, 4)
 assert.equal(new Set(APPLICANTS.map(p => p.name)).size, 4)
-for (const p of APPLICANTS) assert.ok(doc.includes(`Individual job seeker ${p.name} (pseudonym).`), p.name)
+for (const p of APPLICANTS) {
+  assert.ok(doc.includes(`Individual job seeker ${p.name} (pseudonym). ${p.situation} ${p.persona}`), p.name)
+  assert.ok(p.situation.startsWith(p.name) && p.persona.length > 40, `${p.name} has a full situation and a persona`)
+}
 assert.equal(doc.split('Individual job seeker ').length - 1, 4)
 // individuals written as sentences, never as headings the graph could extract as organizations
 assert.ok(!doc.includes('###'))
@@ -58,6 +72,50 @@ assert.ok(doc.includes('fictional'))
 assert.ok(!/\b(male|female|man|woman|he|she|his|her|years? old|aged?)\b/i.test(doc), 'no gender or age')
 assert.ok(!/take-home|assignment|unpaid/i.test(doc), 'the applicants do not presuppose the question')
 assert.ok(!/[\u3400-\u9fff\uac00-\ud7a3]/.test(doc), 'English only')
+// the document is built from whatever applicants it is given: the ones the model generated for this posting
+const generated = [
+  { name: 'Morgan', situation: 'Morgan left a large company and wants more ownership.', persona: 'Morgan is direct and asks about expectations in forums.' },
+  { name: 'Casey', situation: 'Casey leads projects and avoids on-site only roles.', persona: 'Casey is candid and shares application experiences.' }
+]
+const custom = buildApplicantsDoc(generated)
+assert.ok(custom.includes('Individual job seeker Morgan (pseudonym). Morgan left a large company and wants more ownership. Morgan is direct'))
+assert.equal(custom.split('Individual job seeker ').length - 1, 2)
+assert.ok(!custom.includes('Alex'))
+
+// validateApplicants: what the server returned must have the shape the document and the agents depend on
+const four = [
+  { name: 'Morgan', situation: 'Morgan situation text here.', persona: 'Morgan persona text here, long enough.' },
+  { name: 'Casey', situation: 'Casey situation text here.', persona: 'Casey persona text here, long enough.' },
+  { name: 'Jamie', situation: 'Jamie situation text here.', persona: 'Jamie persona text here, long enough.' },
+  { name: 'Alex', situation: 'Alex situation text here.', persona: 'Alex persona text here, long enough.' }
+]
+assert.deepEqual(validateApplicants(four), [])
+assert.equal(validateApplicants(four.slice(0, 3)).length, 1)
+assert.equal(validateApplicants(undefined).length, 1)
+// ...and it has to be the number that was asked for
+assert.deepEqual(validateApplicants(four, 4), [])
+assert.match(validateApplicants(four, 6)[0], /exactly 6/)
+assert.deepEqual(validateApplicants(four.slice(0, 2), 2), [])
+assert.match(validateApplicants(four, 2)[0], /exactly 2/)
+assert.equal(validateApplicants('four').length, 1)
+assert.equal(validateApplicants([]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), { ...four[0] }]).length, 1) // duplicate name
+assert.equal(validateApplicants([...four.slice(0, 3), { name: 'Riley', situation: '', persona: 'x'.repeat(50) }]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), { name: 'Riley', situation: 'ok situation', persona: 7 }]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), null]).length, 1)
+
+// fallbackApplicants: the fixed job seekers used when generating fails; there are only four of them
+assert.deepEqual(fallbackApplicants(4).applicants, APPLICANTS)
+assert.deepEqual(fallbackApplicants(2).applicants.map(a => a.name), ['Alex', 'Jordan'])
+assert.equal(fallbackApplicants(3).applicants.length, 3)
+assert.equal(fallbackApplicants(4).shortBy, 0)
+assert.equal(fallbackApplicants(7).applicants.length, 4)
+assert.equal(fallbackApplicants(7).shortBy, 3)
+assert.equal(fallbackApplicants(8).shortBy, 4)
+assert.notEqual(fallbackApplicants(4).applicants, APPLICANTS) // a copy, so callers cannot change the defaults
+
+// the pipeline shows a stage for it, before the scenario is analyzed
+assert.deepEqual(Object.keys(STAGE_LABELS).slice(0, 2), ['applicants', 'ontology'])
 
 // countApplicants: how many graph entities carry one of the applicant entity types
 const ents = [

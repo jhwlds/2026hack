@@ -2,6 +2,7 @@ export const MAX_ROUNDS = 6
 export const DISCLAIMER = 'Simulated scenario — not real applicant data or a prediction'
 export const REPORT_SCOPE_NOTE = 'Qualitative results limited to this applicant set and this run.'
 export const STAGE_LABELS = {
+  applicants: 'Creating job seekers',
   ontology: 'Analyzing scenario',
   graph: 'Building graph',
   prepare: 'Creating agents',
@@ -12,16 +13,24 @@ export const STAGE_LABELS = {
 const ALLOWED_EXTENSIONS = ['pdf', 'md', 'txt', 'markdown'] // mirrors the backend's Config.ALLOWED_EXTENSIONS
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // mirrors the backend's MAX_CONTENT_LENGTH
 
+// How many fictional job seekers are generated; mirrors the backend's limits.
+export const MIN_APPLICANTS = 2
+export const DEFAULT_APPLICANT_COUNT = 4
+export const MAX_APPLICANTS = 8
+
 export const DEMO_REQUIREMENT = 'What concerns and positive reactions will the 4-hour unpaid coding assignment create in the job seeker community?'
 
 // The original MiroFish takes exactly two inputs: a world seed file and a requirement text.
-export function validateInput(requirement, file) {
+export function validateInput(requirement, file, count = DEFAULT_APPLICANT_COUNT) {
   const errors = []
   if (!file) errors.push('Upload a world seed file.')
   else if (!file.name.includes('.') || !ALLOWED_EXTENSIONS.includes(file.name.split('.').pop().toLowerCase())) {
     errors.push(`${file.name}: only PDF, MD, TXT and MARKDOWN files are supported.`)
   } else if (file.size > MAX_UPLOAD_BYTES) errors.push('The file is larger than 50 MB.')
   if (!String(requirement || '').trim()) errors.push('Describe what you want to simulate.')
+  if (!Number.isInteger(count) || count < MIN_APPLICANTS || count > MAX_APPLICANTS) {
+    errors.push(`The number of job seekers must be a whole number between ${MIN_APPLICANTS} and ${MAX_APPLICANTS}.`)
+  }
   return errors
 }
 
@@ -34,22 +43,55 @@ export function runPhase(data) {
   return data.reddit_completed && data.twitter_completed ? 'closing' : 'running'
 }
 
-// A job posting or company description has no job seekers in it, so the app adds these to every seed as a second file.
-// They differ only in their job-search situation (not in age, gender or country) and say nothing about the policy.
+// Used when generating job seekers for the uploaded document fails. They differ only in their job-search situation (not
+// in age, gender or country) and say nothing about the policy, so they fit any question.
 export const APPLICANTS = [
-  { name: 'Alex', situation: 'is preparing for a first job and building a portfolio. Alex has plenty of free time but little experience, so every application matters.' },
-  { name: 'Jordan', situation: 'works full-time and is preparing to switch jobs. Jordan can only spare weekday evenings and weekends, and values efficiency and flexibility.' },
-  { name: 'Taylor', situation: 'is applying to many companies at the same time. Taylor has to juggle overlapping schedules and decide which applications deserve the most effort.' },
-  { name: 'Riley', situation: 'cares about knowing how a hiring process works before investing in it. Riley wants clear expectations and reconsiders applying when they are missing.' }
+  {
+    name: 'Alex',
+    situation: 'Alex is preparing for a first job and building a portfolio, with plenty of free time but little experience, so every application matters.',
+    persona: 'Alex is curious and a little anxious about proving themselves. Alex reads every posting closely, asks careful questions in forums and trusts employers who explain their process.'
+  },
+  {
+    name: 'Jordan',
+    situation: 'Jordan works full-time and is preparing to switch jobs, and can only spare weekday evenings and weekends.',
+    persona: 'Jordan is pragmatic and guards their limited free time. Jordan compares options methodically and writes short, direct forum replies that weigh effort against the likely reward.'
+  },
+  {
+    name: 'Taylor',
+    situation: 'Taylor is applying to many companies at the same time and has to decide which applications deserve the most effort.',
+    persona: 'Taylor is organised, outspoken and well connected to other candidates. Taylor shares tips freely, keeps a spreadsheet of every process and pushes back when a company asks for too much.'
+  },
+  {
+    name: 'Riley',
+    situation: 'Riley wants to know how a hiring process works before investing in it, and reconsiders applying when expectations are missing.',
+    persona: 'Riley is thoughtful and values transparency over polish. Riley asks what the process looks like and trusts companies more when expectations are written down plainly.'
+  }
 ]
 
-export function buildApplicantsDoc() {
+// Checks what POST /simulation/suggest-applicants returned before it becomes part of the seed.
+export function validateApplicants(list, count = DEFAULT_APPLICANT_COUNT) {
+  if (!Array.isArray(list) || list.length !== count) return [`Expected exactly ${count} job seekers.`]
+  const text = (v) => typeof v === 'string' && v.trim().length > 0
+  if (!list.every(a => a && text(a.name) && text(a.situation) && text(a.persona))) return ['Every job seeker needs a name, situation and persona.']
+  if (new Set(list.map(a => a.name.trim().toLowerCase())).size !== list.length) return ['The job seeker names must be unique.']
+  return []
+}
+
+// The fixed job seekers for when generating fails. There are only four, so a larger number is short by the difference.
+export function fallbackApplicants(count) {
+  const applicants = APPLICANTS.slice(0, count).map(a => ({ ...a }))
+  return { applicants, shortBy: count - applicants.length }
+}
+
+// One named individual per line, as a sentence rather than a heading, so the graph builder extracts people instead of
+// treating a heading as an organization.
+export function buildApplicantsDoc(applicants = APPLICANTS) {
   return [
     '# Job seekers in the discussion',
     '',
     'The following are fictional individual job seekers who discuss this company and its hiring process in an online community.',
     '',
-    ...APPLICANTS.map(p => `- Individual job seeker ${p.name} (pseudonym). ${p.name} ${p.situation}`),
+    ...applicants.map(p => `- Individual job seeker ${p.name} (pseudonym). ${p.situation} ${p.persona}`),
     ''
   ].join('\n')
 }

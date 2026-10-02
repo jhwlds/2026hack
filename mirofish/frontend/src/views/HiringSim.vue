@@ -22,7 +22,7 @@
         </div>
         <div class="run-main">
         <FeedStep
-          :stage="stage" :error="error" :agents="agents" :timeline="timeline" :highlight-key="highlightKey"
+          :stage="stage" :error="error" :note="note" :agents="agents" :timeline="timeline" :highlight-key="highlightKey"
           @retry="execute" @restart="restart"
         />
         <ReportStep v-if="markdown" :markdown="markdown" :timeline="timeline" @jump="jump" />
@@ -46,7 +46,7 @@ import { runPipeline } from '../api/hiringSim'
 import { getGraphData } from '../api/graph'
 import { getReportBySimulation } from '../api/report'
 import { getSimulation, getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
-import { DISCLAIMER, DEMO_REQUIREMENT, buildTimeline } from '../lib/hiringSim'
+import { DISCLAIMER, DEMO_REQUIREMENT, DEFAULT_APPLICANT_COUNT, buildTimeline } from '../lib/hiringSim'
 
 // Set by the route when a past run is opened from the history list.
 const props = defineProps({ simulationId: { type: String, default: '' } })
@@ -57,10 +57,11 @@ const STEPS = [
   { id: 'run', label: 'Feed & report' }
 ]
 const step = ref('scenario')
-const input = reactive({ requirement: DEMO_REQUIREMENT, file: null }) // the two inputs, like the original MiroFish
+const input = reactive({ requirement: DEMO_REQUIREMENT, file: null, applicantCount: DEFAULT_APPLICANT_COUNT }) // the two inputs, like the original MiroFish
 
 const stage = ref('')
 const error = ref('')
+const note = ref('') // e.g. that default job seekers were used
 const markdown = ref('')
 const timeline = ref([])
 const agents = ref([])
@@ -110,6 +111,7 @@ const startFeedPolling = () => {
 
 const onStage = async (s) => {
   stage.value = s
+  note.value = pipeline.applicantNote || ''
   if (pipeline.graphId && !graphData.value) loadGraph()
   if (s === 'run') {
     agents.value = await getSimulationProfiles(pipeline.simulationId, 'reddit').then(r => r.data.profiles).catch(() => [])
@@ -122,7 +124,7 @@ const execute = async () => {
   controller = new AbortController()
   try {
     const out = await runPipeline({
-      requirement: input.requirement, file: input.file, state: pipeline, signal: controller.signal, onStage
+      requirement: input.requirement, file: input.file, applicantCount: input.applicantCount, state: pipeline, signal: controller.signal, onStage
     })
     await Promise.all([refreshFeed(), loadGraph()])
     markdown.value = out.markdown
@@ -151,6 +153,7 @@ const resetRun = () => {
   pipeline = {}
   stage.value = ''
   error.value = ''
+  note.value = ''
   markdown.value = ''
   timeline.value = []
   agents.value = []
@@ -224,6 +227,7 @@ onUnmounted(() => {
 .sim .progress li { border: 1px solid #000; padding: 6px 10px; font-size: 12px; color: #888; }
 .sim .progress li.done { background: #000; color: #fff; }
 .sim .progress li.active { border-width: 3px; color: #000; font-weight: 700; }
+.sim .notice { border: 1px dashed #000; padding: 8px 12px; margin-bottom: 16px; font-size: 13px; }
 .sim .failbox { border: 2px solid #b00020; padding: 12px; margin-bottom: 16px; }
 .sim .agents { border: 1px solid #000; padding: 10px; margin-bottom: 16px; font-size: 13px; }
 .sim .agents li { margin: 4px 0 4px 18px; }

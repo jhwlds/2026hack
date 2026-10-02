@@ -1,23 +1,43 @@
 import { generateOntology, buildGraph, getTaskStatus, getProject } from './graph'
 import {
-  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus, closeSimulationEnv, getGraphEntities
+  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus, closeSimulationEnv, getGraphEntities, suggestApplicants
 } from './simulation'
 import { generateReport, getReport, getReportProgress } from './report'
 import {
-  buildRequirement, buildApplicantsDoc, pickApplicantTypes, countApplicants, pollUntil, runPhase, MAX_ROUNDS
+  buildRequirement, buildApplicantsDoc, validateApplicants, fallbackApplicants, DEFAULT_APPLICANT_COUNT, pickApplicantTypes, countApplicants, pollUntil, runPhase, MAX_ROUNDS
 } from '../lib/hiringSim'
 
 const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || 'The task failed.')
 
 // Fills `state` as it goes, so calling again with the same state after a failure skips the finished stages.
-export async function runPipeline({ requirement, file, state, signal, onStage, maxRounds = MAX_ROUNDS }) {
+export async function runPipeline({
+  requirement, file, applicantCount = DEFAULT_APPLICANT_COUNT, state, signal, onStage, maxRounds = MAX_ROUNDS
+}) {
   const poll = (fn, isDone, isFailed, intervalMs = 2000) => pollUntil(fn, { isDone, isFailed, intervalMs, signal })
+
+  if (!state.projectId && !state.applicants) {
+    // A posting has no job seekers in it, so the model proposes some for this document; if that fails, fixed ones are used.
+    await onStage('applicants')
+    try {
+      const generated = (await suggestApplicants(file, requirement, applicantCount)).data.applicants
+      const problems = validateApplicants(generated, applicantCount)
+      if (problems.length) throw new Error(problems[0])
+      state.applicants = generated
+      state.applicantNote = ''
+    } catch (e) {
+      if (signal?.aborted) throw e
+      const { applicants, shortBy } = fallbackApplicants(applicantCount)
+      state.applicants = applicants
+      state.applicantNote = `Default job seekers were used because creating them from your file failed: ${e.message}` +
+        (shortBy ? ` Only ${applicants.length} default job seekers exist, ${shortBy} fewer than the ${applicantCount} you asked for.` : '')
+    }
+  }
 
   if (!state.projectId) {
     await onStage('ontology')
     const form = new FormData()
     form.append('files', file, file.name) // the world seed
-    form.append('files', new Blob([buildApplicantsDoc()], { type: 'text/markdown' }), 'applicants.md') // a posting has no job seekers in it
+    form.append('files', new Blob([buildApplicantsDoc(state.applicants)], { type: 'text/markdown' }), 'applicants.md') // a posting has no job seekers in it
     form.append('simulation_requirement', buildRequirement(requirement))
     form.append('project_name', `hiring-sim: ${file.name.slice(0, 30)}`)
     const ontology = (await generateOntology(form)).data
