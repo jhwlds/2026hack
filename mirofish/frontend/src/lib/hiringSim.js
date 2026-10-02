@@ -48,11 +48,42 @@ export function buildRequirement(text) {
     'The agents are the individual job seekers described in the seed document; organizations or concepts such as the policy, the company or the community are not agents.',
     "Name every entity type that represents an individual job seeker with a type name ending in 'JobSeeker' (for example JobSeeker), and give no other entity type such a name.",
     "Each job seeker posts an initial opinion after seeing the policy, then replies to, agrees with or pushes back on other job seekers' posts.",
-    'Structure the report with these sections: Key summary; Recurring concerns and positive reactions; Points that strengthened or changed after other agents reacted; Where perspectives split; Improvements the company could consider.',
-    'For every claim, attach a verbatim excerpt from the simulated conversation as a quote block (> "...").',
+    'Keep the report short and easy to scan: about 250 words in total, with no introduction or conclusion.',
+    'The report has exactly 3 sections, titled "Key summary", "Concerns and reactions" and "Improvements". Each section contains only its own content, written once: never repeat the content of another section, and never write another section\'s heading inside a section.',
+    '"Key summary" is at most 3 sentences. "Concerns and reactions" is at most 5 one-sentence bullets covering the recurring concerns and positive reactions, noting what strengthened or changed after other agents replied and where job seekers disagreed. "Improvements" is at most 3 one-sentence bullets the company could consider.',
+    'Support each bullet with one short verbatim excerpt from the simulated conversation as a quote block (> "..."), copied word for word from a single post or comment and never paraphrased inside the quotation marks.',
     'The results are a qualitative analysis of fictional agents and must not be presented as a real applicant population or as statistical proportions.'
   ].join('\n')
 }
+
+const titleKey = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+const BOLD_LABEL = /^\*\*(.+?)\*\*\s*$/
+
+// Every section is written separately and sees the whole requirement, so the first section often contains the entire
+// report (as bold labels named after the other sections) and the later sections write it again. When that happens the
+// first section is kept, its labels become headings, and the sections it already covers are dropped.
+export function dedupeReport(markdown) {
+  const text = String(markdown || '')
+  const parts = text.split(/^(?=## )/m)
+  const start = parts.findIndex(p => p.startsWith('## '))
+  if (start === -1) return text
+  const sections = parts.slice(start).map(body => ({ body, key: titleKey(body.split('\n')[0].slice(3)) }))
+  const known = new Set(sections.map(x => x.key))
+  const lines = sections[0].body.split('\n')
+  const labelKey = (line) => { const m = line.match(BOLD_LABEL); return m ? titleKey(m[1]) : null }
+  const covered = new Set(lines.map(labelKey).filter(k => k && k !== sections[0].key && known.has(k)))
+  if (!covered.size) return text
+
+  const first = lines
+    .filter(l => labelKey(l) !== sections[0].key) // the first section's own label repeats its heading
+    .map(l => (known.has(labelKey(l)) ? `### ${l.match(BOLD_LABEL)[1].trim()}` : l))
+    .join('\n')
+  const rest = sections.slice(1).filter(x => !covered.has(x.key)).map(x => x.body)
+  return [...parts.slice(0, start), first, ...rest].join('')
+}
+
+// Passages inside quotation marks, e.g. a bullet that says: Haeun finds it "a red flag".
+const inlineQuotes = (t) => [...t.matchAll(/["\u201C]([^"\u201D\n]{8,})["\u201D]/g)].map(m => m[1])
 
 export function parseReport(markdown) {
   const blocks = []
@@ -63,8 +94,8 @@ export function parseReport(markdown) {
     let m
     if ((m = line.match(/^(#{1,4})\s+(.+)$/))) blocks.push({ type: 'heading', level: m[1].length, text: text(m[2]) })
     else if ((m = line.match(/^>\s?(.*)$/))) { if (text(m[1])) blocks.push({ type: 'quote', text: text(m[1]) }) }
-    else if ((m = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/))) blocks.push({ type: 'item', text: text(m[1]) })
-    else blocks.push({ type: 'paragraph', text: text(line) })
+    else if ((m = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/))) blocks.push({ type: 'item', text: text(m[1]), quotes: inlineQuotes(text(m[1])) })
+    else blocks.push({ type: 'paragraph', text: text(line), quotes: inlineQuotes(text(line)) })
   }
   return blocks
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {
   validateInput, pickApplicantTypes, buildRequirement, runPhase,
-  parseReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
+  parseReport, dedupeReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
 } from './hiringSim.js'
 
 // validateInput: one world seed file (pdf/md/txt/markdown, up to 50 MB) and one requirement text
@@ -21,7 +21,14 @@ assert.equal(validateInput('ok', { name: 'a.pdf', size: 51 * 1024 * 1024 }).leng
 // buildRequirement: the user's own text comes first and is trimmed, then the fixed product instructions
 const req = buildRequirement('  What concerns will a 4-hour unpaid assignment cause?  ')
 assert.ok(req.startsWith('What concerns will a 4-hour unpaid assignment cause?\n'))
-assert.ok(req.includes('Key summary') && req.includes('Improvements'))
+// the report must stay short: few sections, a word budget, one-sentence bullets, short quotes copied word for word
+assert.ok(req.includes('exactly 3 sections') && req.includes('250 words'))
+// each section writer receives this whole text, so it must say that a section holds only its own content
+assert.ok(req.includes('only its own content') && req.includes('never repeat'))
+assert.ok(!req.includes('Use these sections'))
+assert.ok(req.includes('Key summary') && req.includes('Concerns and reactions') && req.includes('Improvements'))
+assert.ok(req.includes('one-sentence bullets') && req.includes('word for word'))
+assert.ok(!req.includes('Where perspectives split')) // the old five-section list is gone
 assert.ok(req.includes('organizations or concepts such as the policy'))
 // the applicant entity types must be recognizable by name so /prepare can be limited to them
 assert.ok(req.includes("ending in 'JobSeeker'"))
@@ -53,6 +60,43 @@ assert.deepEqual(blocks.map(b => b.type), ['heading', 'paragraph', 'quote', 'ite
 assert.equal(blocks[1].text, 'Text bold')
 assert.equal(blocks[4].text, '<script>alert(1)</script>')
 assert.deepEqual(parseReport(''), [])
+// quotation marks inside a bullet or paragraph are picked out so they can be linked to their source too
+const inline = parseReport('- Haeun said "a 4-hour assignment is excessive for juniors" and \u201Ca red flag\u201D too\nPlain sentence without quotes.\n> "A block quote that is long enough"\n## Heading with "quotes in it here"')
+assert.deepEqual(inline[0].quotes, ['a 4-hour assignment is excessive for juniors', 'a red flag'])
+assert.deepEqual(inline[1].quotes, [])
+assert.equal(inline[2].quotes, undefined) // a quote block is already a quote
+assert.equal(inline[3].quotes, undefined) // headings carry none
+
+// dedupeReport: the report writer sometimes puts the whole report in the first section and then writes the others again
+const repeated = [
+  '# Title', '', '> One line.', '', '---', '',
+  '## Key summary', '', '**Key summary** ', '', 'The summary text.', '',
+  '**Concerns and reactions**', '', '- Concern A', '  > "quote a"', '', '- Concern B', '',
+  '**Improvements**', '', '- Fix A', '',
+  '## Concerns and reactions', '', '- Concern A again', '',
+  '## Improvements', '', 'Fix A again.', ''
+].join('\n')
+const once = dedupeReport(repeated)
+assert.deepEqual(parseReport(once).filter(b => b.type === 'heading').map(b => [b.level, b.text]),
+  [[1, 'Title'], [2, 'Key summary'], [3, 'Concerns and reactions'], [3, 'Improvements']])
+assert.ok(once.includes('The summary text.') && once.includes('- Concern B') && once.includes('- Fix A'))
+assert.ok(!once.includes('again'), 'the later sections that repeat the first one are dropped')
+assert.equal(once.split('Concern A').length - 1, 1)
+assert.ok(once.includes('> "quote a"'))
+assert.ok(once.startsWith('# Title\n\n> One line.'))
+// labels match whatever the case and spacing of the section titles
+assert.ok(!dedupeReport('## Key Summary\n\n**Key summary**\n\nS.\n\n**Concerns And Reactions**\n\n- C\n\n## concerns and reactions\n\n- C2\n').includes('C2'))
+// a section that was not part of the first section stays
+const extra = dedupeReport('## Key summary\n\n**Concerns and reactions**\n\n- C\n\n## Concerns and reactions\n\n- C2\n\n## Methodology\n\nHow it was run.\n')
+assert.ok(extra.includes('How it was run.') && !extra.includes('C2'))
+// reports without that pattern are returned untouched
+const distinct = '# T\n\n## Key summary\n\nS.\n\n## Concerns and reactions\n\n- C\n\n## Improvements\n\n- I\n'
+assert.equal(dedupeReport(distinct), distinct)
+const ownMarkerOnly = '## Key summary\n\n**Key summary**\n\nS.\n\n## Improvements\n\n- I\n'
+assert.equal(dedupeReport(ownMarkerOnly), ownMarkerOnly)
+assert.equal(dedupeReport(''), '')
+assert.equal(dedupeReport('No headings at all.'), 'No headings at all.')
+assert.equal(dedupeReport(undefined), '')
 
 // matchEvidence
 const items = [
