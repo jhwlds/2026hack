@@ -9,16 +9,20 @@
     <div class="banner" role="note">{{ DISCLAIMER }}</div>
     <main>
       <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'profiles'" />
+      <ProfileStep v-else-if="step === 'profiles'" :profiles="profiles" @back="step = 'scenario'" @next="step = 'review'" />
+      <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="selectedProfiles" @back="step = 'profiles'" @start="start" />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
+import ProfileStep from '../components/hiring/ProfileStep.vue'
+import ReviewStep from '../components/hiring/ReviewStep.vue'
 import { DISCLAIMER } from '../lib/hiringSim'
-import { DEMO_SCENARIO } from '../data/defaultProfiles'
+import { DEMO_SCENARIO, DEFAULT_PROFILES } from '../data/defaultProfiles'
 
 const router = useRouter()
 const STEPS = [
@@ -29,6 +33,12 @@ const STEPS = [
 ]
 const step = ref('scenario')
 const scenario = reactive({ ...DEMO_SCENARIO })
+const profiles = ref(DEFAULT_PROFILES.map(p => ({ ...p, selected: true, custom: false })))
+const selectedProfiles = computed(() => profiles.value.filter(p => p.selected))
+
+const start = () => {
+  step.value = 'run' // replaced by the real pipeline run in Task 5
+}
 </script>
 
 <style>
