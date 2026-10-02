@@ -24,11 +24,12 @@
         <span v-if="item.orphan" class="round">(comment whose post was not found)</span>
       </header>
       <p>{{ item.content }}</p>
-      <div v-for="c in item.comments" :id="`feed-${c.key}`" :key="c.key" class="comment" :class="{ hl: c.key === highlightKey }">
+      <div v-for="c in item.comments" :id="`feed-${c.key}`" :key="c.key" class="comment" :class="{ hl: c.key === highlightKey, self: c.selfReply }">
         <header>
           <b>{{ c.name }}</b>
           <span v-if="c.label" class="tag">{{ c.label }}</span>
           <span v-if="c.round != null" class="round">Round {{ c.round }}</span>
+          <span v-if="c.selfReply" class="round">(replying to their own post)</span>
         </header>
         <p>{{ c.content }}</p>
       </div>

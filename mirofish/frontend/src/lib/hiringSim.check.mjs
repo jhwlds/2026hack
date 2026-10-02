@@ -56,23 +56,31 @@ const posts = [
 ]
 const comments = [
   { comment_id: 1, post_id: 1, user_id: 1, content: 'I agree' },
-  { comment_id: 2, post_id: 99, user_id: 2, content: 'Orphan comment' }
+  { comment_id: 2, post_id: 99, user_id: 2, content: 'Orphan comment' },
+  { comment_id: 3, post_id: 2, user_id: 1, content: 'Replying to myself' }
 ]
 const actions = [
   { action_type: 'CREATE_POST', agent_id: 0, agent_name: 'Kim', round_num: 1, action_args: { content: 'First post' } },
   { action_type: 'CREATE_COMMENT', agent_id: 1, agent_name: 'Lee', round_num: 2, action_args: { content: 'I agree' } },
   { action_type: 'LIKE_POST', agent_id: 1, agent_name: 'Lee', round_num: 2, action_args: {} }
 ]
-const agents = [{ profession: 'Junior developer' }, { bio: 'Employed and preparing to switch jobs.' }]
+const agents = [{ name: 'Minjun', profession: 'Junior developer' }, { name: 'Seoyeon', bio: 'Employed and preparing to switch jobs.' }]
 const feed = buildFeed(posts, comments, actions, agents)
 assert.deepEqual(feed.map(i => i.key), ['p1', 'p2', 'c2'])
-assert.equal(feed[0].name, 'Kim')
+assert.equal(feed[0].name, 'Minjun')
 assert.equal(feed[0].label, 'Junior developer')
 assert.equal(feed[0].round, 1)
-assert.equal(feed[0].comments[0].name, 'Lee')
+assert.equal(feed[0].comments[0].name, 'Seoyeon')
 assert.equal(feed[0].comments[0].label, 'Employed and preparing to switch jobs.')
-assert.equal(feed[1].name, 'Agent 1')
+assert.equal(feed[1].name, 'Seoyeon')
+assert.equal(feed[1].round, null)
+assert.equal(feed[2].name, 'Agent 2')
 assert.equal(feed[2].orphan, true)
+// actions are only written after a round ends, so names must come from the profile list when there are none yet
+assert.equal(buildFeed(posts, comments, [], agents)[0].name, 'Minjun')
+// a comment by the post's own author is kept, but flagged
+assert.equal(feed[0].comments[0].selfReply, false)
+assert.equal(feed[1].comments[0].selfReply, true)
 assert.deepEqual(buildFeed([], [], [], []), [])
 
 // pollUntil

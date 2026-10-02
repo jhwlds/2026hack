@@ -76,7 +76,8 @@ export function matchEvidence(quoteText, items) {
   return hit ? hit.key : null
 }
 
-// DB rows carry no author name, so match each row's text against the CREATE_POST/CREATE_COMMENT actions to attach one.
+// DB rows carry only a user_id, which is the index into the profile list. Actions are written only after a round
+// ends, so they are used just to attach the round number by matching each row's text.
 export function buildFeed(posts, comments, actions = [], profiles = []) {
   const authors = new Map()
   for (const a of actions) {
@@ -85,15 +86,15 @@ export function buildFeed(posts, comments, actions = [], profiles = []) {
       authors.set(norm(content), a)
     }
   }
-  const labelOf = (agentId) => {
-    const p = profiles[agentId]
-    return p?.profession || p?.bio?.slice(0, 40) || ''
-  }
+  const labelOf = (p) => p?.profession || p?.bio?.slice(0, 40) || ''
   const authorOf = (row) => {
     const a = authors.get(norm(row.content))
-    return a
-      ? { name: a.agent_name, label: labelOf(a.agent_id), round: a.round_num }
-      : { name: `Agent ${row.user_id}`, label: '', round: null }
+    const p = profiles[row.user_id] || profiles[a?.agent_id]
+    return {
+      name: p?.name || a?.agent_name || `Agent ${row.user_id}`,
+      label: labelOf(p),
+      round: a ? a.round_num : null
+    }
   }
 
   const feed = []
@@ -102,14 +103,14 @@ export function buildFeed(posts, comments, actions = [], profiles = []) {
   for (const p of [...posts].sort(byId('post_id'))) {
     const content = p.content || p.quote_content || ''
     if (!content) continue
-    const item = { key: `p${p.post_id}`, kind: 'post', content, ...authorOf({ ...p, content }), comments: [] }
+    const item = { key: `p${p.post_id}`, kind: 'post', userId: p.user_id, content, ...authorOf({ ...p, content }), comments: [] }
     byPostId.set(p.post_id, item)
     feed.push(item)
   }
   for (const c of [...comments].sort(byId('comment_id'))) {
     const item = { key: `c${c.comment_id}`, kind: 'comment', content: c.content || '', ...authorOf(c), comments: [] }
     const parent = byPostId.get(c.post_id)
-    if (parent) parent.comments.push(item)
+    if (parent) parent.comments.push({ ...item, selfReply: c.user_id === parent.userId })
     else feed.push({ ...item, orphan: true })
   }
   return feed

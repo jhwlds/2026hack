@@ -165,6 +165,7 @@ onUnmounted(() => {
 .sim .tag { border: 1px solid #000; padding: 0 6px; font-size: 11px; }
 .sim .round { color: #888; font-size: 11px; }
 .sim .comment { border-left: 3px solid #000; margin: 8px 0 0 14px; padding: 6px 10px; }
+.sim .comment.self { border-left-style: dashed; opacity: 0.65; }
 .sim .empty { color: #888; font-size: 13px; }
 .sim .scope { font-size: 12px; color: #555; margin-bottom: 12px; }
 .sim .report h3, .sim .report h4, .sim .report h5 { margin: 16px 0 6px; }

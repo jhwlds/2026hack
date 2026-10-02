@@ -54,7 +54,8 @@ PRD 5번 흐름에서 지원자 구성 단계를 뺀 흐름(시나리오 작성 
 
 - `/prepare` 완료 후 **실제 생성된 에이전트 목록**(`getSimulationProfiles`)을 보여 준다. A안에서는 기본 프로필과 생성된 에이전트가 일치하지 않을 수 있으므로 이를 숨기지 않는다.
 - 피드는 `getSimulationPosts`와 댓글 API(`/simulation/{id}/comments`)를 폴링해 시간순으로 렌더링한다. 작성자 옆에 프로필 기반 짧은 라벨을 붙이고, 댓글은 원글 아래에 스레드로 표시한다.
-- DB 행(`post`: post_id, user_id, content, created_at / `comment`: comment_id, post_id, user_id, content)에는 작성자 이름이 없어, `/actions`의 CREATE_POST·CREATE_COMMENT 본문과 일치시켜 작성자 이름·라운드를 붙이고, 라벨은 프로필의 `profession` 또는 `bio` 앞부분을 쓴다. OASIS 댓글은 글 아래 평평하게 달리며 대댓글 id가 없다. 이 가정은 구현 계획의 Task 7에서 실제 실행으로 확인한다.
+- DB 행(`post`: post_id, user_id, content / `comment`: comment_id, post_id, user_id, content)에는 `user_id`만 있다. `user_id`는 `/profiles` 목록의 인덱스(= agent_id)와 일치하므로 작성자 이름과 라벨(`profession` 또는 `bio` 앞부분)은 프로필 목록에서 붙인다. `/actions`는 라운드가 끝난 뒤에야 기록되어 실행 중에는 비어 있으므로, 본문 일치로 라운드 번호를 붙이는 데에만 쓴다. OASIS 댓글은 글 아래 평평하게 달리며 대댓글 id가 없다.
+- OASIS 에이전트는 자기 글에 스스로 댓글을 달기도 한다(한 실행에서 댓글 6개 중 2개). 백엔드 동작이라 데이터는 지우지 않고(리포트 인용 추적이 깨지지 않도록), 피드에서 "(replying to their own post)"로 표시하고 흐리게 보여 준다.
 
 ## 7. 리포트와 근거 추적
 
