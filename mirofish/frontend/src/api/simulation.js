@@ -186,3 +186,16 @@ export const interviewAgents = (data) => {
 export const getSimulationHistory = (limit = 20) => {
   return service.get('/api/simulation/history', { params: { limit } })
 }
+
+/**
+ * Get comments in a simulation
+ * @param {string} simulationId
+ * @param {string} [platform] - 'reddit' | 'twitter' (backend picks one from the simulation config when omitted)
+ * @param {number} limit - max rows to return
+ * @param {number} offset - row offset
+ */
+export const getSimulationComments = (simulationId, platform, limit = 500, offset = 0) => {
+  const params = { limit, offset }
+  if (platform) params.platform = platform
+  return service.get(`/api/simulation/${simulationId}/comments`, { params })
+}
