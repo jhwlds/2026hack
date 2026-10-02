@@ -8,6 +8,9 @@
         <input v-model="p.title" type="text" placeholder="프로필 이름" />
         <button v-if="p.custom" class="btn ghost" @click="remove(p.id)">삭제</button>
       </div>
+      <label class="field">가명 (비워 두면 자동 부여)
+        <input v-model="p.name" />
+      </label>
       <label class="field">구직 상황
         <textarea v-model="p.description" />
       </label>
@@ -33,7 +36,7 @@ const emit = defineEmits(['back', 'next'])
 const errors = ref([])
 
 const add = () => props.profiles.push({
-  id: `custom-${Date.now()}`, title: '', description: '', priorities: '', selected: true, custom: true
+  id: `custom-${Date.now()}`, name: '', title: '', description: '', priorities: '', selected: true, custom: true
 })
 const remove = (id) => props.profiles.splice(props.profiles.findIndex(p => p.id === id), 1)
 const next = () => {

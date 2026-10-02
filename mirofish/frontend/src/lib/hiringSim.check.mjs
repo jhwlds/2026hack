@@ -11,22 +11,30 @@ const scenario = {
   question: '어떤 우려가 생길까?',
   context: ''
 }
-const profiles = [{ title: '첫 취업 준비', description: '포트폴리오를 쌓는 중', priorities: '시간 부담' }]
+const profiles = [{ name: '민준', title: '첫 취업 준비', description: '포트폴리오를 쌓는 중', priorities: '시간 부담' }]
 
 // validate
 assert.equal(validateScenario({ role: '  ', policy: '', details: '', question: '' }).length, 4)
 assert.deepEqual(validateScenario(scenario), [])
 assert.equal(validateProfiles([]).length, 1)
-assert.equal(validateProfiles([{ title: ' ', description: 'x', priorities: 'y' }]).length, 1)
+assert.equal(validateProfiles([{ name: '', title: ' ', description: 'x', priorities: 'y' }]).length, 1)
+assert.deepEqual(validateProfiles([{ name: '', title: 't', description: 'x', priorities: 'y' }]), [])
 assert.deepEqual(validateProfiles(profiles), [])
 
 // seed doc / requirement
 const doc = buildSeedDoc(scenario, profiles)
-assert.ok(doc.includes('4시간 무급 코딩 과제') && doc.includes('### 첫 취업 준비') && doc.includes('핵심 우선순위: 시간 부담'))
+assert.ok(doc.includes('4시간 무급 코딩 과제') && doc.includes('핵심 우선순위: 시간 부담'))
+// each profile is one named individual, never a heading the graph could extract as an organization
+assert.ok(doc.includes('개인 구직자 민준(가명)') && doc.includes('상황 유형: 첫 취업 준비'))
+assert.ok(!doc.includes('###'))
+// a profile without a name falls back to its position
+const unnamed = buildSeedDoc(scenario, [profiles[0], { ...profiles[0], name: '  ' }])
+assert.ok(unnamed.includes('개인 구직자 지원자 2(가명)'))
 assert.ok(!doc.includes('회사/채용 배경'))
 assert.ok(buildSeedDoc({ ...scenario, context: '스타트업' }, profiles).includes('## 회사/채용 배경'))
 const req = buildRequirement(scenario)
 assert.ok(req.includes(scenario.question) && req.includes('핵심 요약') && req.includes('개선안'))
+assert.ok(req.includes('조직이나 개념은 에이전트가 아니다'))
 
 // parseReport: block types, empty quotes dropped, ** stripped, raw HTML kept as plain text
 const blocks = parseReport('# 제목\n\n본문 **강조**\n>\n> "인용 문장입니다 정말로"\n- 항목\n<script>alert(1)</script>')

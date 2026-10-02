@@ -32,17 +32,21 @@ export function buildSeedDoc(s, profiles) {
     '## 정책 세부사항', s.details.trim(), ''
   ]
   if (s.context?.trim()) lines.push('## 회사/채용 배경', s.context.trim(), '')
-  lines.push('## 구직자 커뮤니티 구성원', '다음은 이 정책에 대해 온라인 구직자 커뮤니티에서 토론하는 가상의 구직자들이다.', '')
-  for (const p of profiles) {
-    lines.push(`### ${p.title.trim()}`, p.description.trim(), `핵심 우선순위: ${p.priorities.trim()}`, '')
-  }
-  return lines.join('\n')
+  lines.push('## 토론에 참여하는 개인 구직자들', '다음은 이 정책에 대해 토론하는 가상의 개인 구직자들이다.', '')
+  // One named individual per profile, as a sentence rather than a heading, so the graph builder
+  // extracts people instead of treating the profile title as an organization.
+  profiles.forEach((p, i) => {
+    const name = p.name?.trim() || `지원자 ${i + 1}`
+    lines.push(`- 개인 구직자 ${name}(가명). 상황 유형: ${p.title.trim()}. ${p.description.trim()} 핵심 우선순위: ${p.priorities.trim()}`)
+  })
+  return lines.join('\n') + '\n'
 }
 
 export function buildRequirement(s) {
   return [
     `가상의 구직자 커뮤니티에서 다음 채용 정책에 대한 반응과 토론을 시뮬레이션한다: ${s.policy.trim()}.`,
     `시뮬레이션 질문: ${s.question.trim()}`,
+    '시뮬레이션에 참여하는 에이전트는 시나리오 문서에 적힌 개인 구직자들이며, 정책·회사·커뮤니티 같은 조직이나 개념은 에이전트가 아니다.',
     '각 구직자는 정책을 보고 초기 의견을 게시한 뒤 다른 구직자의 글에 답하거나 동의·반박한다.',
     '리포트는 다음 섹션으로 구성한다: 핵심 요약, 반복해서 나온 우려와 긍정 반응, 다른 에이전트의 반응 이후 강화되거나 바뀐 논점, 관점이 갈린 부분, 회사가 검토할 만한 개선안.',
     '각 섹션의 주장마다 시뮬레이션 대화에서 가져온 원문 발췌를 인용 블록(> "...")으로 첨부한다.',
