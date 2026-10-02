@@ -8,7 +8,7 @@ import { buildSeedDoc, buildRequirement, pollUntil, MAX_ROUNDS } from '../lib/hi
 const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || '작업이 실패했습니다.')
 
 // Fills `state` as it goes, so calling again with the same state after a failure skips the finished stages.
-export async function runPipeline({ scenario, profiles, state, signal, onStage }) {
+export async function runPipeline({ scenario, profiles, state, signal, onStage, maxRounds = MAX_ROUNDS }) {
   const poll = (fn, isDone, isFailed, intervalMs = 2000) => pollUntil(fn, { isDone, isFailed, intervalMs, signal })
 
   if (!state.projectId) {
@@ -56,7 +56,7 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage }
       await startSimulation({
         simulation_id: state.simulationId,
         platform: 'reddit',
-        max_rounds: MAX_ROUNDS,
+        max_rounds: maxRounds,
         force: true,
         enable_graph_memory_update: true
       })
