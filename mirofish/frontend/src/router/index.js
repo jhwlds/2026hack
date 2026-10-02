@@ -44,9 +44,10 @@ const routes = [
     props: true
   },
   {
-    path: '/hiring-sim',
+    path: '/hiring-sim/:simulationId?',
     name: 'HiringSim',
-    component: HiringSim
+    component: HiringSim,
+    props: true
   }
 ]
 

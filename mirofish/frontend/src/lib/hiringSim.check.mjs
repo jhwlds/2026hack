@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {
   validateInput, pickApplicantTypes, buildRequirement, runPhase,
-  parseReport, matchEvidence, buildTimeline, evidenceItems, pollUntil
+  parseReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
 } from './hiringSim.js'
 
 // validateInput: one world seed file (pdf/md/txt/markdown, up to 50 MB) and one requirement text
@@ -114,6 +114,26 @@ assert.equal(actions[0].action_type, 'CREATE_COMMENT') // the input is not reord
 // evidenceItems: only cards with text can be evidence
 assert.deepEqual(evidenceItems(timeline).map(e => e.content), ['First post', 'I agree', 'Quoting this', 'Replying to myself', 'No database row for me'])
 assert.equal(evidenceItems(timeline)[0].key, timeline[0].key)
+
+// summarizeRun: what a history card shows for one past simulation (fields of GET /simulation/history)
+const run = {
+  simulation_id: 'sim_1', project_id: 'proj_1', status: 'completed', created_at: '2026-10-02',
+  simulation_requirement: 'What concerns will a 4-hour unpaid coding assignment cause?\nThe agents are the individual job seekers described in the seed document.',
+  files: [{ filename: 'posting.pdf' }, { filename: 'notes.md' }], current_round: 2, total_rounds: 6, report_id: 'report_1'
+}
+const sum = summarizeRun(run)
+assert.equal(sum.title, 'What concerns will a 4-hour unpaid coding assignment cause?') // only the user's own first line
+assert.equal(sum.files, 'posting.pdf, notes.md')
+assert.equal(sum.rounds, '2/6 rounds')
+assert.equal(sum.hasReport, true)
+assert.equal(sum.date, '2026-10-02')
+assert.equal(summarizeRun({ ...run, created_at: '2026-10-02T13:14:22.911907' }).date, '2026-10-02') // the API sends a full timestamp
+assert.equal(summarizeRun({ ...run, simulation_requirement: 'x'.repeat(200) }).title, 'x'.repeat(90) + '…')
+assert.equal(summarizeRun({ simulation_id: 's' }).title, 'Untitled run')
+assert.equal(summarizeRun({ simulation_id: 's' }).files, 'No files')
+assert.equal(summarizeRun({ simulation_id: 's' }).rounds, 'No rounds yet')
+assert.equal(summarizeRun({ simulation_id: 's', report_id: null }).hasReport, false)
+assert.equal(summarizeRun({ simulation_id: 's', total_rounds: 0 }).rounds, 'No rounds yet')
 
 // pollUntil
 let n = 0

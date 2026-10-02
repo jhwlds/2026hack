@@ -8,7 +8,10 @@
     </header>
     <div class="banner" role="note">{{ DISCLAIMER }}</div>
     <main>
-      <ScenarioStep v-if="step === 'scenario'" :state="input" @next="step = 'review'" />
+      <template v-if="step === 'scenario'">
+        <ScenarioStep :state="input" @next="step = 'review'" />
+        <RunHistory />
+      </template>
       <ReviewStep v-else-if="step === 'review'" :state="input" @back="step = 'scenario'" @start="start" />
       <div v-else class="run">
         <div class="graph-wrap">
@@ -30,18 +33,24 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import i18n from '../i18n'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
 import FeedStep from '../components/hiring/FeedStep.vue'
 import GraphPanel from '../components/GraphPanel.vue'
 import ReportStep from '../components/hiring/ReportStep.vue'
+import RunHistory from '../components/hiring/RunHistory.vue'
 import { runPipeline } from '../api/hiringSim'
 import { getGraphData } from '../api/graph'
-import { getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
+import { getReportBySimulation } from '../api/report'
+import { getSimulation, getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
 import { DISCLAIMER, DEMO_REQUIREMENT, buildTimeline } from '../lib/hiringSim'
 
+// Set by the route when a past run is opened from the history list.
+const props = defineProps({ simulationId: { type: String, default: '' } })
+const router = useRouter()
 const STEPS = [
   { id: 'scenario', label: 'Seed & question' },
   { id: 'review', label: 'Review' },
@@ -136,7 +145,9 @@ const jump = (key) => {
   setTimeout(() => { highlightKey.value = '' }, 2500)
 }
 
-const restart = () => {
+const resetRun = () => {
+  controller?.abort()
+  stopFeedPolling()
   pipeline = {}
   stage.value = ''
   error.value = ''
@@ -147,10 +158,37 @@ const restart = () => {
   step.value = 'scenario'
 }
 
+// "Start a new experiment": a reopened run lives under /hiring-sim/:id, so leave that URL (the watcher resets the page).
+const restart = () => (props.simulationId ? router.push({ name: 'HiringSim' }) : resetRun())
+
+// Reopen a finished run from the history list: everything is read back from the backend, nothing is re-run.
+const openRun = async (simulationId) => {
+  resetRun()
+  step.value = 'run'
+  stage.value = ''
+  try {
+    const sim = (await getSimulation(simulationId)).data
+    pipeline = { simulationId, projectId: sim.project_id, graphId: sim.graph_id, prepared: true, started: true }
+    const [profiles, report] = await Promise.all([
+      getSimulationProfiles(simulationId, 'reddit').then(r => r.data.profiles).catch(() => []),
+      getReportBySimulation(simulationId).then(r => r.data).catch(() => null) // a run can exist without a report
+    ])
+    agents.value = profiles
+    await Promise.all([refreshFeed(), loadGraph()])
+    markdown.value = report?.status === 'completed' ? report.markdown_content || '' : ''
+    stage.value = 'done'
+  } catch (e) {
+    error.value = e.message
+  }
+}
+
 // The backend answers in the language of the Accept-Language header (default zh); this page is English.
 let previousLocale = ''
 let previousTitle = ''
+watch(() => props.simulationId, (id) => (id ? openRun(id) : resetRun()))
+
 onMounted(() => {
+  if (props.simulationId) openRun(props.simulationId)
   previousLocale = i18n.global.locale.value
   i18n.global.locale.value = 'en'
   previousTitle = document.title

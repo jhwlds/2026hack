@@ -129,6 +129,21 @@ export function buildTimeline(actions, { posts = [], comments = [], profiles = [
 
 export const evidenceItems = (timeline) => timeline.filter(t => t.text).map(t => ({ key: t.key, content: t.text }))
 
+const TITLE_MAX = 90
+
+// What a history card shows for one past simulation. The stored requirement is the user's text followed by this
+// product's fixed instruction lines, so the title is only its first line.
+export function summarizeRun(run) {
+  const first = String(run.simulation_requirement || '').split('\n')[0].trim()
+  return {
+    title: first ? (first.length > TITLE_MAX ? first.slice(0, TITLE_MAX) + '…' : first) : 'Untitled run',
+    files: run.files?.length ? run.files.map(f => f.filename).join(', ') : 'No files',
+    rounds: run.total_rounds ? `${run.current_round || 0}/${run.total_rounds} rounds` : 'No rounds yet',
+    hasReport: !!run.report_id,
+    date: String(run.created_at || '').slice(0, 10)
+  }
+}
+
 class PollFailure extends Error {}
 
 // A string returned from isFailed fails the poll with that message. Transient fetch errors are tolerated up to maxErrors in a row.

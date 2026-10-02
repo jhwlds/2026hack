@@ -57,3 +57,11 @@ export const chatWithReport = (data) => {
 export const getReportProgress = (reportId) => {
   return service.get(`/api/report/${reportId}/progress`)
 }
+
+/**
+ * Get the latest report of a simulation
+ * @param {string} simulationId
+ */
+export const getReportBySimulation = (simulationId) => {
+  return service.get(`/api/report/by-simulation/${simulationId}`)
+}

@@ -31,9 +31,10 @@ PRD에서 **의도적으로 뺀 것**: 지원자 프로필의 선택·수정·�
 
 ## 3. 구조
 
-- 라우트: `/hiring-sim` → `views/HiringSim.vue` (3단계: 시드·질문 입력 / 실행 전 확인 / 피드·리포트)
-- `components/hiring/`: `ScenarioStep.vue`(파일 + 텍스트), `ReviewStep.vue`, `FeedStep.vue`, `ReportStep.vue`
-- `lib/hiringSim.js`: 순수 함수(`validateInput`, `buildRequirement`, `pickApplicantTypes`, `parseReport`, `matchEvidence`, `buildFeed`, `pollUntil`)와 상수. node로 직접 검증하려고 axios/i18n 의존성이 없는 별도 파일에 둔다. 검증 스크립트는 `lib/hiringSim.check.mjs`.
+- 라우트: `/hiring-sim/:simulationId?` → `views/HiringSim.vue` (3단계: 시드·질문 입력 / 실행 전 확인 / 타임라인·그래프·리포트). `simulationId`가 있으면 끝난 실행을 다시 연다.
+- `components/hiring/`: `ScenarioStep.vue`(파일 + 텍스트), `ReviewStep.vue`, `FeedStep.vue`(진행 표시 + 에이전트 목록 + 타임라인), `ActionTimeline.vue`, `ReportStep.vue`, `RunHistory.vue`
+- 기존 MiroFish에서 가져온 것: `components/GraphPanel.vue`(수정 없이 그대로 사용), `Step3Simulation.vue`의 액션 카드(템플릿, 헬퍼 4개, 스타일 47규칙을 `ActionTimeline.vue`로 복사. 원본은 수정하지 않음), `/simulation/history` API(기록 목록)
+- `lib/hiringSim.js`: 순수 함수(`validateInput`, `buildRequirement`, `pickApplicantTypes`, `runPhase`, `parseReport`, `matchEvidence`, `buildTimeline`, `evidenceItems`, `summarizeRun`, `pollUntil`)와 상수. node로 직접 검증하려고 axios/i18n 의존성이 없는 별도 파일에 둔다. 검증 스크립트는 `lib/hiringSim.check.mjs`.
 - `api/hiringSim.js`: 기존 `api/graph.js`, `simulation.js`, `report.js`를 순서대로 호출하고 폴링하는 재개 가능한 오케스트레이션(`runPipeline`).
 
 ## 4. 입력
@@ -55,19 +56,27 @@ PRD에서 **의도적으로 뺀 것**: 지원자 프로필의 선택·수정·�
 - 리포트는 생성이 끝나 저장되기 전에는 `GET /report/:id`가 404를 돌려주므로, 404일 때는 `/report/:id/progress`로 상태를 확인하고(없으면 pending), `completed`이고 본문이 있을 때 끝난 것으로 본다.
 - 시뮬레이션은 `parallel` 러너로 시작하고(`enable_twitter`/`enable_reddit` 모두 true) 피드는 `reddit` 쪽만 읽는다. 단일 플랫폼 러너는 완료 감지에 쓰이는 `actions.jsonl`을 쓰지 않아 끝나도 `running`으로 남기 때문이다.
 
-## 6. 피드
+## 6. 타임라인, 그래프, 기록
 
-- `/prepare` 완료 후 **실제 생성된 에이전트 목록**(`getSimulationProfiles`)을 보여 준다. 시드 파일의 개인과 생성된 에이전트가 일치하지 않을 수 있으므로 숨기지 않는다.
-- 피드는 `getSimulationPosts`와 `getSimulationComments`를 3초마다 폴링해 렌더링한다. 작성자 옆에 프로필 기반 짧은 라벨을 붙이고, 댓글은 원글 아래에 스레드로 표시한다.
-- DB 행(`post`: post_id, user_id, content / `comment`: comment_id, post_id, user_id, content)에는 `user_id`만 있다. `user_id`는 `/profiles` 목록의 인덱스(= agent_id)와 일치하므로 작성자 이름과 라벨(`profession` 또는 `bio` 앞부분)은 프로필 목록에서 붙인다. `/actions`는 라운드가 끝난 뒤에야 기록되어 실행 중에는 비어 있으므로, 본문 일치로 라운드 번호를 붙이는 데에만 쓴다. OASIS 댓글은 글 아래 평평하게 달리며 대댓글 id가 없다.
-- OASIS 에이전트는 자기 글에 스스로 댓글을 달기도 한다(한 실행에서 댓글 6개 중 2개). 백엔드 동작이라 데이터는 지우지 않고(리포트 인용 추적이 깨지지 않도록), 피드에서 "(replying to their own post)"로 표시하고 흐리게 보여 준다.
+**액션 타임라인** (`ActionTimeline.vue`): 원래 MiroFish의 카드(POST, COMMENT, LIKE, QUOTE, REPOST, FOLLOW, SEARCH, 투표, IDLE)를 시간순으로 보여 준다. 에이전트 이름 옆에 프로필 라벨(`profession` 또는 `bio` 앞부분)을 붙인다.
+- 데이터는 `/actions`(Reddit만)이다. 이 응답은 시간순 정렬이 보장되지 않아 `buildTimeline`이 `timestamp`로 정렬한다. 실행 중에는 3초마다 새로 읽는다.
+- 댓글 액션에는 `comment_id`만 있고 `post_id`가 없다. 누구의 글에 단 댓글인지는 DB 행(`comment` → `post` → 작성자 `user_id`, 이는 `/profiles` 목록의 인덱스와 같다)으로 이어 "Reply to @이름's post"로 보여 준다.
+- OASIS 에이전트는 자기 글에 스스로 댓글을 달기도 한다(한 실행에서 댓글 12개 중 4개). 백엔드 동작이라 데이터는 지우지 않고(리포트 인용 추적이 깨지지 않도록) "(their own post)"로 표시하고 카드를 흐리게 보여 준다.
+- Twitter 쪽 액션은 보여 주지 않는다. 같은 에이전트가 두 플랫폼에서 비슷한 글을 쓰고, 근거 매칭과 댓글 연결이 Reddit DB 기준이기 때문이다.
+- 시뮬레이션이 끝나면 생성된 **에이전트 목록**(`getSimulationProfiles`)을 접힌 상자로 보여 준다. 시드 파일의 개인과 생성된 에이전트가 일치하지 않을 수 있으므로 숨기지 않는다.
+
+**엔티티 그래프** (`GraphPanel.vue`, 수정 없이 그대로 사용): 화면 왼쪽에 고정해 두고, 시드에서 어떤 엔티티가 뽑혔는지 보여 준다. 그래프 구축이 끝나면 불러오고, 실행 중에는 활동이 그래프에 다시 기록되므로 15초마다, 끝날 때 한 번 더 읽는다.
+
+**기록 목록** (`RunHistory.vue`): 시드·질문 입력 화면 아래에 `/simulation/history`의 최근 20건을 카드로 보여 주고(제목은 저장된 요구사항의 첫 줄, 파일 이름, 라운드, 리포트 유무, 날짜), 누르면 `/hiring-sim/:id`로 열린다. 원본의 `HistoryDatabase.vue`(스크롤 애니메이션 카드, 상세 창이 원본 화면으로만 이동)는 우리 페이지로 열 수 없어 같은 API로 간단히 다시 만들었다. 목록을 불러오지 못해도 페이지는 동작한다.
+
+**다시 열기**: 시뮬레이션 상태(`project_id`, `graph_id`), 프로필, 타임라인, 그래프, `/report/by-simulation/:id`의 리포트를 읽어 오기만 하고 아무것도 다시 실행하지 않는다. 리포트가 없는 실행은 타임라인과 그래프만 보여 준다. "새 실험 시작"은 `/hiring-sim`으로 돌아간다.
 
 ## 7. 리포트와 근거 추적
 
 - 리포트 본문은 `getReport`의 `markdown_content`를 렌더링한다. 모든 텍스트는 `v-html` 없이 `{{ }}`로만 출력한다.
-- 백엔드는 구조화된 근거 링크를 제공하지 않는다. 리포트의 인용문(blockquote)을 피드의 게시글·댓글 원문과 부분 문자열로 매칭하고(`matchEvidence`), 일치하면 "View source"로 피드의 해당 글로 이동한다. 일치하지 않는 인용은 "Source not found"로 표시한다.
+- 백엔드는 구조화된 근거 링크를 제공하지 않는다. 리포트의 인용문(blockquote)을 타임라인 카드(게시글·인용·댓글)의 본문과 부분 문자열로 매칭하고(`matchEvidence`), 일치하면 "View source"로 타임라인의 해당 카드로 이동한다. 일치하지 않는 인용은 "Source not found"로 표시한다.
 - 매칭 규칙: 인용 속 따옴표 안 문장(줄임표로 나뉘면 가장 긴 조각)을 단어로 나눠, 한 게시글·댓글에서 그 단어들이 **순서대로 80% 이상** 나타나고 5단어 이상일 때만 일치로 본다. 리포트 모델이 작은 단어를 빼고 인용하는 경우를 잡기 위함이다. 일부 단어만 공유하는 의역은 근거로 보지 않는다.
-- 한계: 리포트 모델은 원문을 의역해 인용하는 경우가 많다. 샘플 시드로 한 실행에서 인용 블록 21개 중 6개(고유 인용 10개 중 3개)만 피드와 연결되었고, 나머지는 원문 단어가 50~60%만 포함된 의역이었다. 이는 백엔드 리포트 에이전트의 동작이라 이번 범위에서는 "Source not found"로 표시한다.
+- 한계: 리포트 모델은 원문을 의역해 인용하는 경우가 많다. 샘플 시드로 한 실행에서 인용 블록 21개 중 6개(고유 인용 10개 중 3개)만 타임라인과 연결되었고, 나머지는 원문 단어가 50~60%만 포함된 의역이었다. 이는 백엔드 리포트 에이전트의 동작이라 이번 범위에서는 "Source not found"로 표시한다.
 
 ## 8. 가상 시뮬레이션 고지
 

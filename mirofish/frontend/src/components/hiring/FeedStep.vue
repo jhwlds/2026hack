@@ -5,7 +5,7 @@
       <li v-for="(label, key) in STAGE_LABELS" :key="key" :class="stageClass(key)">{{ label }}</li>
     </ol>
     <div v-if="error" class="failbox" role="alert">
-      <strong>{{ STAGE_LABELS[stage] }} failed</strong>
+      <strong>{{ STAGE_LABELS[stage] || 'Loading the run' }} failed</strong>
       <p>{{ error }}</p>
       <button class="btn" @click="$emit('retry')">Retry</button>
     </div>
