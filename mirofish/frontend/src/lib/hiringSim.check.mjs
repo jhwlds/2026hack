@@ -62,6 +62,17 @@ const items = [
 assert.equal(matchEvidence('"Four hours is too long" — Agent A', items), 'p1')
 assert.equal(matchEvidence('"If the criteria are not published ... feels unfair"', items), 'c2')
 assert.equal(matchEvidence('"An entirely unrelated remark made at length"', items), null)
+// the report model often drops small words from a quote; the words must still appear in order in one post or comment
+const dropped = [{ key: 'c7', content: 'Honestly the total time investment is simply too high for me right now' }]
+assert.equal(matchEvidence('"the total time investment too high"', dropped), 'c7')
+// a paraphrase that only shares some words is not evidence
+assert.equal(matchEvidence('"time investment is the biggest problem for applicants"', dropped), null)
+// words in the wrong order are not a quote
+assert.equal(matchEvidence('"high too investment time total the"', dropped), null)
+// too short to identify a source
+assert.equal(matchEvidence('"too high"', dropped), null)
+// the best-covered source wins when several share words
+assert.equal(matchEvidence('"the total time investment is simply too high"', [{ key: 'x', content: 'the total time is a lot' }, ...dropped]), 'c7')
 assert.equal(matchEvidence('ok', items), null)
 assert.equal(matchEvidence('', items), null)
 

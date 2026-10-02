@@ -71,17 +71,37 @@ export function parseReport(markdown) {
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[\s"'“”‘’`.,!?…\-—·()[\]「」]+/g, '')
 
+const tokens = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/).filter(Boolean)
+
+// Share of quote tokens found, in order, in the source tokens (a subsequence, so dropped small words are tolerated).
+function orderedCoverage(quote, source) {
+  let at = 0
+  let found = 0
+  for (const t of quote) {
+    const i = source.indexOf(t, at)
+    if (i !== -1) { found++; at = i + 1 }
+  }
+  return found / quote.length
+}
+
+const MIN_QUOTE_TOKENS = 5
+const MIN_COVERAGE = 0.8
+
 // Take the text inside the quotation marks of a quote block; if an ellipsis splits it, use the longest fragment.
+// The report model often drops small words, so a quote matches the source whose words cover at least 80% of it in order;
+// anything that only shares some words (a paraphrase) is deliberately not treated as evidence.
 export function matchEvidence(quoteText, items) {
   const inner = String(quoteText || '').match(/["“「]([^"”」]{8,})["”」]/)
-  const fragments = (inner ? inner[1] : String(quoteText || '')).split(/\.{3}|…/).map(norm)
-  const q = fragments.sort((a, b) => b.length - a.length)[0] || ''
-  if (q.length < 8) return null
-  const hit = items.find(i => {
-    const c = norm(i.content)
-    return c.includes(q) || (c.length >= 8 && q.includes(c))
-  })
-  return hit ? hit.key : null
+  const fragments = (inner ? inner[1] : String(quoteText || '')).split(/\.{3}|…/).map(tokens)
+  const q = fragments.sort((a, b) => b.length - a.length)[0] || []
+  if (q.length < MIN_QUOTE_TOKENS) return null
+  let best = null
+  let bestScore = MIN_COVERAGE
+  for (const item of items) {
+    const score = orderedCoverage(q, tokens(item.content))
+    if (score >= bestScore && (!best || score > bestScore)) { best = item.key; bestScore = score }
+  }
+  return best
 }
 
 // DB rows carry only a user_id, which is the index into the profile list. Actions are written only after a round
