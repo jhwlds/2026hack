@@ -4,6 +4,7 @@ import pytest
 
 from app.utils.openai_chat_compat import (
     create_chat_completion,
+    agent_model_config,
     extract_chat_completion_text,
     is_gpt5_family,
 )
@@ -163,3 +164,25 @@ def test_a_later_family_model_gets_max_completion_tokens_and_no_temperature():
             "response_format": {"type": "json_object"},
         }
     ]
+
+
+# The simulated agents choose their actions through function tools. gpt-6-luna rejects tools unless reasoning_effort is
+# "none" ("Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'"). That value was
+# checked on gpt-6 only; GPT-5 accepts tools with its default reasoning, so it must be left alone.
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.0-luna", " GPT-6 ", "gpt-7", "gpt-10-large"])
+def test_gpt6_and_later_agents_turn_reasoning_off_so_function_tools_work(model):
+    assert agent_model_config(model) == {"reasoning_effort": "none"}
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5", "gpt-5.1", "gpt-5-2025-08-07", "gpt-4o-mini", "gpt-4.1", "qwen-plus", "third-party-chat-model", "gpt-luna", "", None],
+)
+def test_every_other_model_keeps_the_default_agent_configuration(model):
+    assert agent_model_config(model) == {}
+
+
+def test_each_call_returns_its_own_dict_so_a_caller_cannot_change_the_next_one():
+    first = agent_model_config("gpt-6-luna")
+    first["temperature"] = 0.5
+    assert agent_model_config("gpt-6-luna") == {"reasoning_effort": "none"}

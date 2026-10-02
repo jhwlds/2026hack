@@ -25,6 +25,23 @@ def is_gpt5_family(model: Optional[str]) -> bool:
     return bool(match) and int(match.group(1)) >= _FIRST_FAMILY_WITH_NEW_PARAMETERS
 
 
+_FIRST_FAMILY_REJECTING_TOOLS_WITH_REASONING = 6
+
+
+def agent_model_config(model: Optional[str]) -> Dict[str, Any]:
+    """
+    Extra request settings for the model the simulated agents run on.
+
+    The agents pick their actions through function tools. gpt-6-luna answers those requests with a 400 unless
+    reasoning_effort is "none", so the agents could post once and never act again. The value was verified on gpt-6
+    only; GPT-5 accepts tools with its default reasoning, so every other model keeps the default configuration.
+    """
+    match = _NUMBERED_GPT.match((model or "").strip().lower())
+    if match and int(match.group(1)) >= _FIRST_FAMILY_REJECTING_TOOLS_WITH_REASONING:
+        return {"reasoning_effort": "none"}
+    return {}
+
+
 def create_chat_completion(
     client: Any,
     *,

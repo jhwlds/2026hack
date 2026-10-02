@@ -159,6 +159,7 @@ from action_logger import SimulationLogManager, PlatformActionLogger
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
+    from app.utils.openai_chat_compat import agent_model_config
     import oasis
     from oasis import (
         ActionType,
@@ -1033,6 +1034,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=llm_model,
+        model_config_dict=agent_model_config(llm_model) or None,
     )
 
 

@@ -117,6 +117,7 @@ def setup_oasis_logging(log_dir: str):
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
+    from app.utils.openai_chat_compat import agent_model_config
     import oasis
     from oasis import (
         ActionType,
@@ -456,6 +457,7 @@ class TwitterSimulationRunner:
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
+            model_config_dict=agent_model_config(llm_model) or None,
         )
     
     def _get_active_agents_for_round(
