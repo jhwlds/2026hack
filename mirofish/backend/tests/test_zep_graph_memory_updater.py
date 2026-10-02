@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 import threading
 from queue import Queue
@@ -235,3 +236,90 @@ def test_flush_deadline_keeps_unattempted_platform_for_a_safe_retry(monkeypatch)
     updater._flush_remaining(deadline=1.0)
     assert updater._platform_buffers["reddit"] == []
     assert len(writes) == 2
+
+
+_CJK = re.compile(r"[㐀-䶿一-鿿]")
+
+# One row per action type, with every optional argument present or absent, to cover each branch of the templates.
+_EPISODE_CASES = [
+    ("CREATE_POST", {"content": "Unpaid tasks are unfair"}),
+    ("CREATE_POST", {}),
+    ("LIKE_POST", {"post_content": "p", "post_author_name": "Jiho"}),
+    ("LIKE_POST", {"post_content": "p"}),
+    ("LIKE_POST", {"post_author_name": "Jiho"}),
+    ("LIKE_POST", {}),
+    ("DISLIKE_POST", {"post_content": "p", "post_author_name": "Jiho"}),
+    ("DISLIKE_POST", {}),
+    ("REPOST", {"original_content": "o", "original_author_name": "Jiho"}),
+    ("REPOST", {"original_author_name": "Jiho"}),
+    ("REPOST", {}),
+    ("QUOTE_POST", {"original_content": "o", "original_author_name": "Jiho", "quote_content": "q"}),
+    ("QUOTE_POST", {"original_content": "o", "quote_content": "q"}),
+    ("QUOTE_POST", {"original_author_name": "Jiho"}),
+    ("QUOTE_POST", {}),
+    ("FOLLOW", {"target_user_name": "Jiho"}),
+    ("FOLLOW", {}),
+    ("CREATE_COMMENT", {"content": "c", "post_content": "p", "post_author_name": "Jiho"}),
+    ("CREATE_COMMENT", {"content": "c", "post_content": "p"}),
+    ("CREATE_COMMENT", {"content": "c", "post_author_name": "Jiho"}),
+    ("CREATE_COMMENT", {"content": "c"}),
+    ("CREATE_COMMENT", {}),
+    ("LIKE_COMMENT", {"comment_content": "c", "comment_author_name": "Jiho"}),
+    ("LIKE_COMMENT", {"comment_content": "c"}),
+    ("LIKE_COMMENT", {"comment_author_name": "Jiho"}),
+    ("LIKE_COMMENT", {}),
+    ("DISLIKE_COMMENT", {"comment_content": "c", "comment_author_name": "Jiho"}),
+    ("DISLIKE_COMMENT", {}),
+    ("SEARCH_POSTS", {"query": "unpaid"}),
+    ("SEARCH_POSTS", {}),
+    ("SEARCH_USER", {"query": "jiho"}),
+    ("SEARCH_USER", {}),
+    ("MUTE", {"target_user_name": "Jiho"}),
+    ("MUTE", {}),
+    ("SOMETHING_NEW", {}),
+]
+
+
+def _episode_text(action_type, args):
+    return AgentActivity(
+        platform="reddit",
+        agent_id=0,
+        agent_name="Haeun",
+        action_type=action_type,
+        action_args=args,
+        round_num=1,
+        timestamp="2026-07-22T12:00:00+08:00",
+    ).to_episode_text()
+
+
+@pytest.mark.parametrize("locale", ["en", "es"])
+@pytest.mark.parametrize("action_type,args", _EPISODE_CASES)
+def test_episode_text_has_no_chinese_for_non_chinese_locales(monkeypatch, locale, action_type, args):
+    monkeypatch.setattr(updater_module, "get_locale", lambda: locale)
+
+    text = _episode_text(action_type, args)
+
+    assert not _CJK.search(text), text
+    assert text.startswith("[2026-07-22T12:00:00+08:00] [reddit round 1] Haeun: ")
+
+
+def test_english_episode_text_keeps_what_the_agent_wrote_word_for_word(monkeypatch):
+    # The report agent quotes these facts, so the original sentence must survive unchanged inside the quotation marks.
+    monkeypatch.setattr(updater_module, "get_locale", lambda: "en")
+
+    post = _episode_text("CREATE_POST", {"content": "Unpaid tasks are unfair"})
+    comment = _episode_text(
+        "CREATE_COMMENT",
+        {"content": "I agree", "post_content": "Unpaid tasks are unfair", "post_author_name": "Jiho"},
+    )
+
+    assert post.endswith('Haeun: posted: "Unpaid tasks are unfair"')
+    assert comment.endswith('Haeun: commented on Jiho\'s post "Unpaid tasks are unfair": "I agree"')
+
+
+def test_chinese_locale_keeps_the_original_chinese_episode_text(monkeypatch):
+    monkeypatch.setattr(updater_module, "get_locale", lambda: "zh")
+
+    assert _episode_text("CREATE_POST", {"content": "hi"}).endswith("Haeun: 发布了一条帖子：「hi」")
+    assert _episode_text("FOLLOW", {"target_user_name": "Jiho"}).endswith("Haeun: 关注了用户「Jiho」")
+    assert _episode_text("SOMETHING_NEW", {}).endswith("Haeun: 执行了SOMETHING_NEW操作")

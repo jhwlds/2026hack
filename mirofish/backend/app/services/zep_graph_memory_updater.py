@@ -57,7 +57,9 @@ class AgentActivity:
         }
         
         describe_func = action_descriptions.get(self.action_type, self._describe_generic)
-        description = describe_func()
+        # The Chinese templates stay as they are for the Chinese locale. Every other locale gets English, so the facts
+        # that Zep extracts (and that the report agent later quotes) are not written in Chinese for them.
+        description = describe_func() if get_locale() == 'zh' else self._describe_english()
         
         # Keep the event time in the source text as well as episode metadata so
         # temporal extraction does not collapse a multi-action batch.
@@ -202,6 +204,63 @@ class AgentActivity:
     def _describe_generic(self) -> str:
         # 对于未知的动作类型，生成通用描述
         return f"执行了{self.action_type}操作"
+
+    def _describe_english(self) -> str:
+        """English counterpart of the _describe_* templates above, with the same optional parts."""
+        a = self.action_args
+
+        def quoted(text):
+            return f'"{text}"'
+
+        def about(noun, content_key, author_key, verb, article='a'):
+            # e.g. "liked Jiho's post: "..."", "liked a post: "..."", "liked Jiho's post", "liked a post"
+            content, author = a.get(content_key, ""), a.get(author_key, "")
+            target = f"{author}'s {noun}" if author else f"{article} {noun}"
+            return f"{verb} {target}: {quoted(content)}" if content else f"{verb} {target}"
+
+        t = self.action_type
+        if t == "CREATE_POST":
+            return f"posted: {quoted(a['content'])}" if a.get("content") else "made a post"
+        if t == "LIKE_POST":
+            return about("post", "post_content", "post_author_name", "liked")
+        if t == "DISLIKE_POST":
+            return about("post", "post_content", "post_author_name", "disliked")
+        if t == "REPOST":
+            return about("post", "original_content", "original_author_name", "reposted")
+        if t == "QUOTE_POST":
+            original, author = a.get("original_content", ""), a.get("original_author_name", "")
+            target = f"{author}'s post" if author else "a post"
+            base = f"quoted {target} {quoted(original)}" if original else f"quoted {target}"
+            quote = a.get("quote_content", "") or a.get("content", "")
+            return f"{base}, adding the comment: {quoted(quote)}" if quote else base
+        if t == "FOLLOW":
+            name = a.get("target_user_name", "")
+            return f"followed the user {quoted(name)}" if name else "followed a user"
+        if t == "CREATE_COMMENT":
+            content, post, author = a.get("content", ""), a.get("post_content", ""), a.get("post_author_name", "")
+            if not content:
+                return "left a comment"
+            if post and author:
+                return f"commented on {author}'s post {quoted(post)}: {quoted(content)}"
+            if post:
+                return f"commented on the post {quoted(post)}: {quoted(content)}"
+            if author:
+                return f"commented on {author}'s post: {quoted(content)}"
+            return f"commented: {quoted(content)}"
+        if t == "LIKE_COMMENT":
+            return about("comment", "comment_content", "comment_author_name", "liked")
+        if t == "DISLIKE_COMMENT":
+            return about("comment", "comment_content", "comment_author_name", "disliked")
+        if t == "SEARCH_POSTS":
+            query = a.get("query", "") or a.get("keyword", "")
+            return f"searched for {quoted(query)}" if query else "ran a search"
+        if t == "SEARCH_USER":
+            query = a.get("query", "") or a.get("username", "")
+            return f"searched for the user {quoted(query)}" if query else "searched for a user"
+        if t == "MUTE":
+            name = a.get("target_user_name", "")
+            return f"muted the user {quoted(name)}" if name else "muted a user"
+        return f"performed the {t} action"
 
 
 class _DrainDeadlineExceeded(TimeoutError):
