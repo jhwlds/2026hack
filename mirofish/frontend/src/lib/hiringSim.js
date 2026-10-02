@@ -17,13 +17,6 @@ export function validateScenario(scenario) {
     .map(([, label]) => `${label}을(를) 입력해 주세요.`)
 }
 
-export function validateProfiles(profiles) {
-  if (!profiles.length) return ['지원자 프로필을 하나 이상 선택해 주세요.']
-  return profiles.some(p => !p.title.trim() || !p.description.trim())
-    ? ['선택한 프로필의 이름과 설명을 모두 입력해 주세요.']
-    : []
-}
-
 export function buildSeedDoc(s, profiles) {
   const lines = [
     '# 채용 정책 시나리오 (가상 시뮬레이션용)', '',
@@ -35,10 +28,9 @@ export function buildSeedDoc(s, profiles) {
   lines.push('## 토론에 참여하는 개인 구직자들', '다음은 이 정책에 대해 토론하는 가상의 개인 구직자들이다.', '')
   // One named individual per profile, as a sentence rather than a heading, so the graph builder
   // extracts people instead of treating the profile title as an organization.
-  profiles.forEach((p, i) => {
-    const name = p.name?.trim() || `지원자 ${i + 1}`
-    lines.push(`- 개인 구직자 ${name}(가명). 상황 유형: ${p.title.trim()}. ${p.description.trim()} 핵심 우선순위: ${p.priorities.trim()}`)
-  })
+  for (const p of profiles) {
+    lines.push(`- 개인 구직자 ${p.name}(가명). 상황 유형: ${p.title}. ${p.description} 핵심 우선순위: ${p.priorities}`)
+  }
   return lines.join('\n') + '\n'
 }
 

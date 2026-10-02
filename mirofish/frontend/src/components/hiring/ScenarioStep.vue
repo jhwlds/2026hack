@@ -21,7 +21,7 @@
       <p v-for="e in errors" :key="e" class="err">{{ e }}</p>
     </div>
     <div class="actions">
-      <button class="btn" @click="next">다음: 지원자 구성</button>
+      <button class="btn" @click="next">다음: 실행 전 확인</button>
     </div>
   </section>
 </template>

@@ -8,9 +8,8 @@
     </header>
     <div class="banner" role="note">{{ DISCLAIMER }}</div>
     <main>
-      <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'profiles'" />
-      <ProfileStep v-else-if="step === 'profiles'" :profiles="profiles" @back="step = 'scenario'" @next="step = 'review'" />
-      <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="selectedProfiles" @back="step = 'profiles'" @start="start" />
+      <ScenarioStep v-if="step === 'scenario'" :scenario="scenario" @next="step = 'review'" />
+      <ReviewStep v-else-if="step === 'review'" :scenario="scenario" :profiles="DEFAULT_PROFILES" @back="step = 'scenario'" @start="start" />
       <div v-else class="run">
         <FeedStep
           :stage="stage" :error="error" :agents="agents" :feed="feed" :highlight-key="highlightKey"
@@ -23,10 +22,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onUnmounted } from 'vue'
+import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ScenarioStep from '../components/hiring/ScenarioStep.vue'
-import ProfileStep from '../components/hiring/ProfileStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
 import FeedStep from '../components/hiring/FeedStep.vue'
 import ReportStep from '../components/hiring/ReportStep.vue'
@@ -38,14 +36,11 @@ import { DEMO_SCENARIO, DEFAULT_PROFILES } from '../data/defaultProfiles'
 const router = useRouter()
 const STEPS = [
   { id: 'scenario', label: '시나리오' },
-  { id: 'profiles', label: '지원자 구성' },
   { id: 'review', label: '실행 전 확인' },
   { id: 'run', label: '피드·리포트' }
 ]
 const step = ref('scenario')
 const scenario = reactive({ ...DEMO_SCENARIO })
-const profiles = ref(DEFAULT_PROFILES.map(p => ({ ...p, selected: true, custom: false })))
-const selectedProfiles = computed(() => profiles.value.filter(p => p.selected))
 
 const stage = ref('')
 const error = ref('')
@@ -88,7 +83,7 @@ const execute = async () => {
   controller = new AbortController()
   try {
     const out = await runPipeline({
-      scenario, profiles: selectedProfiles.value, state: pipeline, signal: controller.signal, onStage
+      scenario, profiles: DEFAULT_PROFILES, state: pipeline, signal: controller.signal, onStage
     })
     await refreshFeed()
     markdown.value = out.markdown

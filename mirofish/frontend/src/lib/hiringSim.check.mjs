@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  validateScenario, validateProfiles, buildSeedDoc, buildRequirement,
+  validateScenario, buildSeedDoc, buildRequirement,
   parseReport, matchEvidence, buildFeed, pollUntil
 } from './hiringSim.js'
 
@@ -16,10 +16,6 @@ const profiles = [{ name: '민준', title: '첫 취업 준비', description: '�
 // validate
 assert.equal(validateScenario({ role: '  ', policy: '', details: '', question: '' }).length, 4)
 assert.deepEqual(validateScenario(scenario), [])
-assert.equal(validateProfiles([]).length, 1)
-assert.equal(validateProfiles([{ name: '', title: ' ', description: 'x', priorities: 'y' }]).length, 1)
-assert.deepEqual(validateProfiles([{ name: '', title: 't', description: 'x', priorities: 'y' }]), [])
-assert.deepEqual(validateProfiles(profiles), [])
 
 // seed doc / requirement
 const doc = buildSeedDoc(scenario, profiles)
@@ -27,9 +23,6 @@ assert.ok(doc.includes('4시간 무급 코딩 과제') && doc.includes('핵심 �
 // each profile is one named individual, never a heading the graph could extract as an organization
 assert.ok(doc.includes('개인 구직자 민준(가명)') && doc.includes('상황 유형: 첫 취업 준비'))
 assert.ok(!doc.includes('###'))
-// a profile without a name falls back to its position
-const unnamed = buildSeedDoc(scenario, [profiles[0], { ...profiles[0], name: '  ' }])
-assert.ok(unnamed.includes('개인 구직자 지원자 2(가명)'))
 assert.ok(!doc.includes('회사/채용 배경'))
 assert.ok(buildSeedDoc({ ...scenario, context: '스타트업' }, profiles).includes('## 회사/채용 배경'))
 const req = buildRequirement(scenario)

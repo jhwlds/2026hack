@@ -10,10 +10,11 @@
         <template v-if="scenario.context"><dt>배경</dt><dd>{{ scenario.context }}</dd></template>
       </dl>
     </div>
+    <p class="scope">참여하는 가상 지원자는 기본 구성이 자동 적용됩니다. 구직 상황과 제약만 기술하며, 특정 집단 전체를 대표하지 않습니다.</p>
     <div class="card">
       <dl>
         <template v-for="p in profiles" :key="p.id">
-          <dt>{{ p.title }}</dt>
+          <dt>{{ p.name }}(가명) · {{ p.title }}</dt>
           <dd>{{ p.description }}<br />우선순위: {{ p.priorities }}</dd>
         </template>
       </dl>
