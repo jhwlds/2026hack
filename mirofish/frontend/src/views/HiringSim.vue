@@ -16,6 +16,7 @@
           :stage="stage" :error="error" :agents="agents" :feed="feed" :highlight-key="highlightKey"
           @retry="execute" @restart="restart"
         />
+        <ReportStep v-if="markdown" :markdown="markdown" :feed="feed" @jump="jump" />
       </div>
     </main>
   </div>
@@ -28,6 +29,7 @@ import ScenarioStep from '../components/hiring/ScenarioStep.vue'
 import ProfileStep from '../components/hiring/ProfileStep.vue'
 import ReviewStep from '../components/hiring/ReviewStep.vue'
 import FeedStep from '../components/hiring/FeedStep.vue'
+import ReportStep from '../components/hiring/ReportStep.vue'
 import { runPipeline } from '../api/hiringSim'
 import { getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
 import { DISCLAIMER, buildFeed } from '../lib/hiringSim'
@@ -101,6 +103,12 @@ const execute = async () => {
 const start = () => {
   step.value = 'run'
   return execute()
+}
+
+const jump = (key) => {
+  highlightKey.value = key
+  document.getElementById(`feed-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  setTimeout(() => { highlightKey.value = '' }, 2500)
 }
 
 const restart = () => {
