@@ -12,10 +12,10 @@
       <ReviewStep v-else-if="step === 'review'" :state="input" @back="step = 'scenario'" @start="start" />
       <div v-else class="run">
         <FeedStep
-          :stage="stage" :error="error" :agents="agents" :feed="feed" :highlight-key="highlightKey"
+          :stage="stage" :error="error" :agents="agents" :timeline="timeline" :highlight-key="highlightKey"
           @retry="execute" @restart="restart"
         />
-        <ReportStep v-if="markdown" :markdown="markdown" :feed="feed" @jump="jump" />
+        <ReportStep v-if="markdown" :markdown="markdown" :timeline="timeline" @jump="jump" />
       </div>
     </main>
   </div>
@@ -30,7 +30,7 @@ import FeedStep from '../components/hiring/FeedStep.vue'
 import ReportStep from '../components/hiring/ReportStep.vue'
 import { runPipeline } from '../api/hiringSim'
 import { getSimulationPosts, getSimulationComments, getSimulationActions, getSimulationProfiles } from '../api/simulation'
-import { DISCLAIMER, DEMO_REQUIREMENT, buildFeed } from '../lib/hiringSim'
+import { DISCLAIMER, DEMO_REQUIREMENT, buildTimeline } from '../lib/hiringSim'
 
 const STEPS = [
   { id: 'scenario', label: 'Seed & question' },
@@ -43,7 +43,7 @@ const input = reactive({ requirement: DEMO_REQUIREMENT, file: null }) // the two
 const stage = ref('')
 const error = ref('')
 const markdown = ref('')
-const feed = ref([])
+const timeline = ref([])
 const agents = ref([])
 const highlightKey = ref('')
 
@@ -59,7 +59,9 @@ const refreshFeed = async () => {
     getSimulationComments(id, 'reddit', 500, 0),
     getSimulationActions(id, { platform: 'reddit', limit: 1000 })
   ])
-  feed.value = buildFeed(posts.data.posts, comments.data.comments, actions.data.actions, agents.value)
+  timeline.value = buildTimeline(actions.data.actions, {
+    posts: posts.data.posts, comments: comments.data.comments, profiles: agents.value
+  })
 }
 const stopFeedPolling = () => clearInterval(feedTimer)
 const startFeedPolling = () => {
@@ -100,7 +102,7 @@ const start = () => {
 
 const jump = (key) => {
   highlightKey.value = key
-  document.getElementById(`feed-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  document.getElementById(`action-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   setTimeout(() => { highlightKey.value = '' }, 2500)
 }
 
@@ -109,7 +111,7 @@ const restart = () => {
   stage.value = ''
   error.value = ''
   markdown.value = ''
-  feed.value = []
+  timeline.value = []
   agents.value = []
   step.value = 'scenario'
 }

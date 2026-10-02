@@ -17,15 +17,15 @@
 
 <script setup>
 import { computed } from 'vue'
-import { parseReport, matchEvidence, REPORT_SCOPE_NOTE, DISCLAIMER } from '../../lib/hiringSim'
+import { parseReport, matchEvidence, evidenceItems, REPORT_SCOPE_NOTE, DISCLAIMER } from '../../lib/hiringSim'
 
 const props = defineProps({
   markdown: { type: String, default: '' },
-  feed: { type: Array, default: () => [] }
+  timeline: { type: Array, default: () => [] }
 })
 defineEmits(['jump'])
 
-const evidence = computed(() => props.feed.flatMap(i => [i, ...i.comments]))
+const evidence = computed(() => evidenceItems(props.timeline))
 const blocks = computed(() => parseReport(props.markdown).map(b =>
   b.type === 'quote' ? { ...b, key: matchEvidence(b.text, evidence.value) } : b
 ))

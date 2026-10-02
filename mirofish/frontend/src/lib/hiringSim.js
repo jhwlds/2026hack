@@ -69,8 +69,6 @@ export function parseReport(markdown) {
   return blocks
 }
 
-const norm = (s) => String(s || '').toLowerCase().replace(/[\s"'“”‘’`.,!?…\-—·()[\]「」]+/g, '')
-
 const tokens = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/).filter(Boolean)
 
 // Share of quote tokens found, in order, in the source tokens (a subsequence, so dropped small words are tolerated).
@@ -104,45 +102,32 @@ export function matchEvidence(quoteText, items) {
   return best
 }
 
-// DB rows carry only a user_id, which is the index into the profile list. Actions are written only after a round
-// ends, so they are used just to attach the round number by matching each row's text.
-export function buildFeed(posts, comments, actions = [], profiles = []) {
-  const authors = new Map()
-  for (const a of actions) {
-    const content = a.action_args?.content
-    if (content && (a.action_type === 'CREATE_POST' || a.action_type === 'CREATE_COMMENT')) {
-      authors.set(norm(content), a)
-    }
-  }
-  const labelOf = (p) => p?.profession || p?.bio?.slice(0, 40) || ''
-  const authorOf = (row) => {
-    const a = authors.get(norm(row.content))
-    const p = profiles[row.user_id] || profiles[a?.agent_id]
-    return {
-      name: p?.name || a?.agent_name || `Agent ${row.user_id}`,
-      label: labelOf(p),
-      round: a ? a.round_num : null
-    }
-  }
+const actionKey = (a) => `${a.timestamp}-${a.platform}-${a.agent_id}-${a.action_type}`
+const actionText = (a) => a.action_args?.content || a.action_args?.quote_content || ''
 
-  const feed = []
-  const byPostId = new Map()
-  const byId = (key) => (x, y) => x[key] - y[key]
-  for (const p of [...posts].sort(byId('post_id'))) {
-    const content = p.content || p.quote_content || ''
-    if (!content) continue
-    const item = { key: `p${p.post_id}`, kind: 'post', userId: p.user_id, content, ...authorOf({ ...p, content }), comments: [] }
-    byPostId.set(p.post_id, item)
-    feed.push(item)
-  }
-  for (const c of [...comments].sort(byId('comment_id'))) {
-    const item = { key: `c${c.comment_id}`, kind: 'comment', content: c.content || '', ...authorOf(c), comments: [] }
-    const parent = byPostId.get(c.post_id)
-    if (parent) parent.comments.push({ ...item, selfReply: c.user_id === parent.userId })
-    else feed.push({ ...item, orphan: true })
-  }
-  return feed
+// Turns the /actions rows into the cards of the original simulation timeline, in time order (the server does not sort them).
+// An action carries only a comment_id, so who a comment replied to comes from the database rows: comment -> post -> author.
+export function buildTimeline(actions, { posts = [], comments = [], profiles = [] } = {}) {
+  const commentById = new Map(comments.map(c => [String(c.comment_id), c]))
+  const postById = new Map(posts.map(p => [String(p.post_id), p]))
+  const labelOf = (p) => p?.profession || p?.bio?.slice(0, 40) || ''
+  return [...actions]
+    .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))
+    .map(a => {
+      const item = { ...a, key: actionKey(a), text: a.action_type === 'LIKE_POST' ? '' : actionText(a), label: labelOf(profiles[a.agent_id]), selfReply: false }
+      if (a.action_type === 'CREATE_COMMENT') {
+        const row = commentById.get(String(a.action_args?.comment_id))
+        const post = row && postById.get(String(row.post_id))
+        if (post) {
+          item.replyToName = profiles[post.user_id]?.name
+          item.selfReply = post.user_id === row.user_id
+        }
+      }
+      return item
+    })
 }
+
+export const evidenceItems = (timeline) => timeline.filter(t => t.text).map(t => ({ key: t.key, content: t.text }))
 
 class PollFailure extends Error {}
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {
   validateInput, pickApplicantTypes, buildRequirement, runPhase,
-  parseReport, matchEvidence, buildFeed, pollUntil
+  parseReport, matchEvidence, buildTimeline, evidenceItems, pollUntil
 } from './hiringSim.js'
 
 // validateInput: one world seed file (pdf/md/txt/markdown, up to 50 MB) and one requirement text
@@ -76,40 +76,44 @@ assert.equal(matchEvidence('"the total time investment is simply too high"', [{ 
 assert.equal(matchEvidence('ok', items), null)
 assert.equal(matchEvidence('', items), null)
 
-// buildFeed
-const posts = [
-  { post_id: 2, user_id: 1, content: 'Second post' },
-  { post_id: 1, user_id: 0, content: 'First post' },
-  { post_id: 3, user_id: 2, content: '', quote_content: null }
-]
-const comments = [
-  { comment_id: 1, post_id: 1, user_id: 1, content: 'I agree' },
-  { comment_id: 2, post_id: 99, user_id: 2, content: 'Orphan comment' },
-  { comment_id: 3, post_id: 2, user_id: 1, content: 'Replying to myself' }
-]
+// buildTimeline: the original MiroFish action cards, in time order, joined with the DB rows that know who replied to whom
 const actions = [
-  { action_type: 'CREATE_POST', agent_id: 0, agent_name: 'Kim', round_num: 1, action_args: { content: 'First post' } },
-  { action_type: 'CREATE_COMMENT', agent_id: 1, agent_name: 'Lee', round_num: 2, action_args: { content: 'I agree' } },
-  { action_type: 'LIKE_POST', agent_id: 1, agent_name: 'Lee', round_num: 2, action_args: {} }
+  { action_type: 'CREATE_COMMENT', agent_id: 1, agent_name: 'Lee', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:07.4', action_args: { comment_id: '12', content: 'I agree' } },
+  { action_type: 'CREATE_POST', agent_id: 0, agent_name: 'Kim', round_num: 1, platform: 'reddit', timestamp: '2026-10-02T14:03:05.5', action_args: { content: 'First post', post_id: '1' } },
+  { action_type: 'LIKE_POST', agent_id: 1, agent_name: 'Lee', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:08.0', action_args: {} },
+  { action_type: 'QUOTE_POST', agent_id: 2, agent_name: 'Park', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:09.0', action_args: { quote_content: 'Quoting this' } },
+  { action_type: 'CREATE_COMMENT', agent_id: 0, agent_name: 'Kim', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:10.0', action_args: { comment_id: '13', content: 'Replying to myself' } },
+  { action_type: 'CREATE_COMMENT', agent_id: 2, agent_name: 'Park', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:11.0', action_args: { comment_id: '99', content: 'No database row for me' } }
 ]
-const agents = [{ name: 'Minjun', profession: 'Junior developer' }, { name: 'Seoyeon', bio: 'Employed and preparing to switch jobs.' }]
-const feed = buildFeed(posts, comments, actions, agents)
-assert.deepEqual(feed.map(i => i.key), ['p1', 'p2', 'c2'])
-assert.equal(feed[0].name, 'Minjun')
-assert.equal(feed[0].label, 'Junior developer')
-assert.equal(feed[0].round, 1)
-assert.equal(feed[0].comments[0].name, 'Seoyeon')
-assert.equal(feed[0].comments[0].label, 'Employed and preparing to switch jobs.')
-assert.equal(feed[1].name, 'Seoyeon')
-assert.equal(feed[1].round, null)
-assert.equal(feed[2].name, 'Agent 2')
-assert.equal(feed[2].orphan, true)
-// actions are only written after a round ends, so names must come from the profile list when there are none yet
-assert.equal(buildFeed(posts, comments, [], agents)[0].name, 'Minjun')
-// a comment by the post's own author is kept, but flagged
-assert.equal(feed[0].comments[0].selfReply, false)
-assert.equal(feed[1].comments[0].selfReply, true)
-assert.deepEqual(buildFeed([], [], [], []), [])
+const db = {
+  posts: [{ post_id: 1, user_id: 0, content: 'First post' }],
+  comments: [
+    { comment_id: 12, post_id: 1, user_id: 1, content: 'I agree' },
+    { comment_id: 13, post_id: 1, user_id: 0, content: 'Replying to myself' }
+  ],
+  profiles: [{ name: 'Kim', profession: 'Junior developer' }, { name: 'Lee', bio: 'Employed and preparing to switch jobs.' }]
+}
+const timeline = buildTimeline(actions, db)
+assert.deepEqual(timeline.map(t => t.action_type), ['CREATE_POST', 'CREATE_COMMENT', 'LIKE_POST', 'QUOTE_POST', 'CREATE_COMMENT', 'CREATE_COMMENT'])
+assert.equal(new Set(timeline.map(t => t.key)).size, timeline.length)
+assert.deepEqual(timeline.map(t => t.text), ['First post', 'I agree', '', 'Quoting this', 'Replying to myself', 'No database row for me'])
+assert.equal(timeline[0].label, 'Junior developer')
+assert.equal(timeline[1].label, 'Employed and preparing to switch jobs.')
+assert.equal(timeline[3].label, '')
+// comments are joined to their post through the database comment row
+assert.equal(timeline[1].replyToName, 'Kim')
+assert.equal(timeline[1].selfReply, false)
+assert.equal(timeline[4].replyToName, 'Kim')
+assert.equal(timeline[4].selfReply, true)
+// no database row: the card still renders, without reply information
+assert.equal(timeline[5].replyToName, undefined)
+assert.equal(timeline[5].selfReply, false)
+assert.deepEqual(buildTimeline([], { posts: [], comments: [], profiles: [] }), [])
+assert.equal(actions[0].action_type, 'CREATE_COMMENT') // the input is not reordered in place
+
+// evidenceItems: only cards with text can be evidence
+assert.deepEqual(evidenceItems(timeline).map(e => e.content), ['First post', 'I agree', 'Quoting this', 'Replying to myself', 'No database row for me'])
+assert.equal(evidenceItems(timeline)[0].key, timeline[0].key)
 
 // pollUntil
 let n = 0
