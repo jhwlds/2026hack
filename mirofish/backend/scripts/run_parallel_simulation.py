@@ -69,7 +69,6 @@ import asyncio
 import json
 import logging
 import multiprocessing
-import random
 import signal
 import sqlite3
 import warnings
@@ -1043,50 +1042,19 @@ def get_active_agents_for_round(
     current_hour: int,
     round_num: int
 ) -> List:
-    """根据时间和配置决定本轮激活哪些Agent"""
-    time_config = config.get("time_config", {})
+    """Activate every configured agent. Hour of day is ignored."""
+    del current_hour, round_num
     agent_configs = config.get("agent_configs", [])
-    
-    base_min = time_config.get("agents_per_hour_min", 5)
-    base_max = time_config.get("agents_per_hour_max", 20)
-    
-    peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-    off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-    
-    if current_hour in peak_hours:
-        multiplier = time_config.get("peak_activity_multiplier", 1.5)
-    elif current_hour in off_peak_hours:
-        multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
-    else:
-        multiplier = 1.0
-    
-    target_count = int(random.uniform(base_min, base_max) * multiplier)
-    
-    candidates = []
+
+    active_agents = []
     for cfg in agent_configs:
         agent_id = cfg.get("agent_id", 0)
-        active_hours = cfg.get("active_hours", list(range(8, 23)))
-        activity_level = cfg.get("activity_level", 0.5)
-        
-        if current_hour not in active_hours:
-            continue
-        
-        if random.random() < activity_level:
-            candidates.append(agent_id)
-    
-    selected_ids = random.sample(
-        candidates, 
-        min(target_count, len(candidates))
-    ) if candidates else []
-    
-    active_agents = []
-    for agent_id in selected_ids:
         try:
             agent = env.agent_graph.get_agent(agent_id)
             active_agents.append((agent_id, agent))
         except Exception:
             pass
-    
+
     return active_agents
 
 

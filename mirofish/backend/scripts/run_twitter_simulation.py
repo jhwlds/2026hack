@@ -18,7 +18,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 import signal
 import sys
 import sqlite3
@@ -465,67 +464,19 @@ class TwitterSimulationRunner:
         current_hour: int,
         round_num: int
     ) -> List:
-        """
-        根据时间和配置决定本轮激活哪些Agent
-        
-        Args:
-            env: OASIS环境
-            current_hour: 当前模拟小时（0-23）
-            round_num: 当前轮数
-            
-        Returns:
-            激活的Agent列表
-        """
-        time_config = self.config.get("time_config", {})
+        """Activate every configured agent. Hour of day is ignored."""
+        del current_hour, round_num
         agent_configs = self.config.get("agent_configs", [])
-        
-        # 基础激活数量
-        base_min = time_config.get("agents_per_hour_min", 5)
-        base_max = time_config.get("agents_per_hour_max", 20)
-        
-        # 根据时段调整
-        peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-        off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-        
-        if current_hour in peak_hours:
-            multiplier = time_config.get("peak_activity_multiplier", 1.5)
-        elif current_hour in off_peak_hours:
-            multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
-        else:
-            multiplier = 1.0
-        
-        target_count = int(random.uniform(base_min, base_max) * multiplier)
-        
-        # 根据每个Agent的配置计算激活概率
-        candidates = []
+
+        active_agents = []
         for cfg in agent_configs:
             agent_id = cfg.get("agent_id", 0)
-            active_hours = cfg.get("active_hours", list(range(8, 23)))
-            activity_level = cfg.get("activity_level", 0.5)
-            
-            # 检查是否在活跃时间
-            if current_hour not in active_hours:
-                continue
-            
-            # 根据活跃度计算概率
-            if random.random() < activity_level:
-                candidates.append(agent_id)
-        
-        # 随机选择
-        selected_ids = random.sample(
-            candidates, 
-            min(target_count, len(candidates))
-        ) if candidates else []
-        
-        # 转换为Agent对象
-        active_agents = []
-        for agent_id in selected_ids:
             try:
                 agent = env.agent_graph.get_agent(agent_id)
                 active_agents.append((agent_id, agent))
             except Exception:
                 pass
-        
+
         return active_agents
     
     async def run(self, max_rounds: int = None):

@@ -49,6 +49,7 @@ mirofish/backend/uploads/
 *.swo
 .cursor/
 .claude/
+.serena/
 
 # Local scratch (upstream convention)
 mydoc/
