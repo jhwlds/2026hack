@@ -48,7 +48,7 @@ PRD 5번 흐름에서 지원자 구성 단계를 뺀 흐름(시나리오 작성 
 - 각 단계는 상단 진행 표시줄에 표시한다.
 - 단계 실패 시 실패한 단계 이름과 백엔드 에러 메시지를 보여 주고 해당 단계부터 재시도할 수 있다.
 - 폴링 타이머는 컴포넌트 unmount 시 정리한다.
-- 리포트 완료 여부는 `getReport`를 폴링해 `status`로 판단한다(`api/report.js`의 `getReportStatus`는 백엔드 POST 라우트와 메서드가 달라 쓰지 않는다). 피드 플랫폼은 `reddit` 단일이다.
+- 리포트 완료 여부는 `getReport`를 폴링해 `status`로 판단한다(`api/report.js`의 `getReportStatus`는 백엔드 POST 라우트와 메서드가 달라 쓰지 않는다). 시뮬레이션은 `parallel` 러너로 시작하고(`enable_twitter`/`enable_reddit` 모두 true) 피드는 `reddit` 쪽만 읽는다. 단일 플랫폼 러너는 완료 감지에 쓰이는 `actions.jsonl`을 쓰지 않아 끝나도 `running`으로 남기 때문이다.
 
 ## 6. 피드
 

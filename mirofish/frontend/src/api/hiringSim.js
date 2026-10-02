@@ -32,7 +32,7 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage, 
     state.simulationId ||= (await createSimulation({
       project_id: state.projectId,
       graph_id: state.graphId,
-      enable_twitter: false,
+      enable_twitter: true,
       enable_reddit: true
     })).data.simulation_id
     const prep = await prepareSimulation({
@@ -55,7 +55,9 @@ export async function runPipeline({ scenario, profiles, state, signal, onStage, 
     if (!state.started) {
       await startSimulation({
         simulation_id: state.simulationId,
-        platform: 'reddit',
+        // Only the parallel runner writes the action logs the backend uses to detect completion;
+        // the single-platform runners finish but stay "running" forever. The feed still reads reddit only.
+        platform: 'parallel',
         max_rounds: maxRounds,
         force: true,
         enable_graph_memory_update: true
