@@ -2,6 +2,8 @@ import pytest
 
 from app.services.applicant_generator import (
     APPLICANT_COUNT,
+    MAX_APPLICANTS,
+    MIN_APPLICANTS,
     ApplicantGenerationError,
     ApplicantGenerator,
     validate_applicants,
@@ -41,6 +43,31 @@ def _good():
             "Riley is thoughtful and values transparency over salary. Riley asks what the first year looks like "
             "and trusts companies more when expectations are written down plainly.",
         ),
+    ]
+
+
+_SITUATIONS = [
+    "Is finishing a degree and applying for a first engineering job while building a portfolio.",
+    "Works full-time at a larger company and looks for a better role in the evenings and on weekends.",
+    "Has several interviews scheduled across different startups in the same fortnight and must prioritise.",
+    "Recently relocated and wants to understand a company's culture and growth before committing to it.",
+    "Returned to the workforce after a long break and needs a gentle ramp into a new team.",
+    "Freelances for several clients and would only join a company offering real technical ownership.",
+    "Switched careers through a bootcamp and wants a mentor more than a high salary.",
+    "Manages a small team today and wants to return to hands-on engineering work.",
+]
+_NAMES = ["Alex", "Jordan", "Taylor", "Riley", "Morgan", "Casey", "Jamie", "Avery"]
+
+
+def _many(count):
+    return [
+        _applicant(
+            _NAMES[i],
+            _SITUATIONS[i],
+            f"{_NAMES[i]} is a thoughtful candidate number {i} who reads postings closely and writes careful, "
+            "specific replies in forums about how a company treats the people it hires.",
+        )
+        for i in range(count)
     ]
 
 
@@ -222,3 +249,58 @@ def test_a_reply_without_an_applicants_list_is_an_error(reply):
 
     with pytest.raises(ApplicantGenerationError):
         ApplicantGenerator(client).generate(DOC, REQUIREMENT)
+
+
+# ---- a chosen number of applicants ---------------------------------------------------------------------------------
+
+
+def test_the_default_and_the_limits():
+    assert (MIN_APPLICANTS, APPLICANT_COUNT, MAX_APPLICANTS) == (2, 4, 8)
+
+
+@pytest.mark.parametrize("count", [2, 3, 6, 8])
+def test_validate_accepts_exactly_the_requested_number(count):
+    assert len(validate_applicants(_many(count), DOC, count)) == count
+
+
+def test_validate_rejects_a_different_number_than_the_requested_one():
+    with pytest.raises(ApplicantGenerationError, match="exactly 6"):
+        validate_applicants(_many(4), DOC, 6)
+    with pytest.raises(ApplicantGenerationError, match="exactly 3"):
+        validate_applicants(_many(4), DOC, 3)
+
+
+def test_the_generator_asks_the_model_for_the_requested_number():
+    client = FakeClient({"applicants": _many(6)})
+
+    result = ApplicantGenerator(client).generate(DOC, REQUIREMENT, 6)
+
+    prompt = _text(client.calls[0])
+    assert len(result) == 6
+    assert "exactly 6" in prompt
+    assert "exactly 4" not in prompt
+
+
+def test_the_generator_asks_for_four_when_no_number_is_given():
+    client = FakeClient({"applicants": _good()})
+
+    ApplicantGenerator(client).generate(DOC, REQUIREMENT)
+
+    assert "exactly 4" in _text(client.calls[0])
+
+
+@pytest.mark.parametrize("bad", [0, 1, 9, 100, -3, 4.5, "4", None, True])
+def test_a_count_outside_the_limits_never_reaches_the_model(bad):
+    client = FakeClient({"applicants": _good()})
+
+    with pytest.raises(ApplicantGenerationError, match="between 2 and 8"):
+        ApplicantGenerator(client).generate(DOC, REQUIREMENT, bad)
+
+    assert client.calls == []
+
+
+def test_more_applicants_get_more_room_in_the_reply():
+    client = FakeClient({"applicants": _many(8)}, {"applicants": _many(2)})
+
+    ApplicantGenerator(client).generate(DOC, REQUIREMENT, 8)
+    ApplicantGenerator(client).generate(DOC, REQUIREMENT, 2)

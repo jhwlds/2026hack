@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional
 from ..utils.llm_client import LLMClient
 from ..utils.locale import get_language_instruction
 
-APPLICANT_COUNT = 4
+MIN_APPLICANTS = 2
+APPLICANT_COUNT = 4  # the default
+MAX_APPLICANTS = 8
 MAX_DOCUMENT_CHARS = 6000
 
 _NAME = re.compile(r"^[A-Za-z][A-Za-z'\-]{1,23}$")
@@ -30,11 +32,12 @@ _DEMOGRAPHICS = re.compile(
 # Two applicants whose situations share this much of their wording are not different enough.
 _MAX_SITUATION_OVERLAP = 0.6
 
-SYSTEM_PROMPT = f"""You design fictional job seekers for a social-media simulation of how candidates react to a company's \
+def system_prompt(count: int) -> str:
+    return f"""You design fictional job seekers for a social-media simulation of how candidates react to a company's \
 hiring process. You are given a document about a company or role (for example a job posting) and a question the \
 simulation will answer.
 
-Create exactly {APPLICANT_COUNT} different fictional INDIVIDUAL job seekers who might realistically be reading about this \
+Create exactly {count} different fictional INDIVIDUAL job seekers who might realistically be reading about this \
 company in an online job-seeker community.
 
 Rules:
@@ -63,12 +66,19 @@ def _words(text: str) -> set:
     return set(_WORD.findall(text.lower()))
 
 
-def validate_applicants(raw: Any, document_text: str = "") -> List[Dict[str, str]]:
-    if not isinstance(raw, list) or len(raw) != APPLICANT_COUNT:
-        got = len(raw) if isinstance(raw, list) else "no list of"
+def check_count(count: Any) -> int:
+    # bool is an int in Python, and True would otherwise pass as 1
+    if isinstance(count, bool) or not isinstance(count, int) or not MIN_APPLICANTS <= count <= MAX_APPLICANTS:
         raise ApplicantGenerationError(
-            f"The model returned {got} applicants; exactly {APPLICANT_COUNT} are required."
+            f"The number of job seekers must be a whole number between {MIN_APPLICANTS} and {MAX_APPLICANTS}."
         )
+    return count
+
+
+def validate_applicants(raw: Any, document_text: str = "", count: int = APPLICANT_COUNT) -> List[Dict[str, str]]:
+    if not isinstance(raw, list) or len(raw) != count:
+        got = len(raw) if isinstance(raw, list) else "no list of"
+        raise ApplicantGenerationError(f"The model returned {got} applicants; exactly {count} are required.")
     if not all(isinstance(item, dict) for item in raw):
         raise ApplicantGenerationError("Every applicant must be an object with a name, situation and persona.")
 
@@ -113,23 +123,24 @@ class ApplicantGenerator:
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client or LLMClient()
 
-    def generate(self, document_text: str, requirement: str) -> List[Dict[str, str]]:
+    def generate(self, document_text: str, requirement: str, count: int = APPLICANT_COUNT) -> List[Dict[str, str]]:
+        count = check_count(count)
         user = (
             f"Document:\n\"\"\"\n{document_text[:MAX_DOCUMENT_CHARS]}\n\"\"\"\n\n"
             f"Question the simulation will answer:\n{requirement.strip()}\n\n"
-            f"Create exactly {APPLICANT_COUNT} job seekers."
+            f"Create exactly {count} job seekers."
         )
         messages = [
-            {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{get_language_instruction()}"},
+            {"role": "system", "content": f"{system_prompt(count)}\n\n{get_language_instruction()}"},
             {"role": "user", "content": user},
         ]
 
         error: Optional[ApplicantGenerationError] = None
         for _attempt in range(2):  # one retry, told what was wrong
-            reply = self.llm_client.chat_json(messages=messages, temperature=0.8, max_tokens=2048)
+            reply = self.llm_client.chat_json(messages=messages, temperature=0.8, max_tokens=512 * count + 512)
             try:
                 return validate_applicants(
-                    reply.get("applicants") if isinstance(reply, dict) else None, document_text
+                    reply.get("applicants") if isinstance(reply, dict) else None, document_text, count
                 )
             except ApplicantGenerationError as e:
                 error = e
