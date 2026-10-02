@@ -28,9 +28,10 @@ PRD 5번 흐름(시나리오 작성 → 지원자 구성 → 실행 전 확인 �
 ## 3. 구조
 
 - 라우트: `/hiring-sim` → `views/HiringSim.vue` (4단계 전환: 시나리오 / 지원자 구성 / 실행 전 확인 / 피드·리포트)
-- `components/hiring/`: `ScenarioStep.vue`, `ProfileStep.vue`, `FeedStep.vue`, `ReportStep.vue`
+- `components/hiring/`: `ScenarioStep.vue`, `ProfileStep.vue`, `ReviewStep.vue`(실행 전 확인), `FeedStep.vue`, `ReportStep.vue`
 - `data/defaultProfiles.js`: 기본 프로필 4종 (첫 취업 준비, 재직 중 이직 준비, 여러 회사 과제 병행, 평가 기준·소요 시간 중시). 구직 상황·시간 여유·경험·우선순위만 기술하고 인구통계 속성은 쓰지 않는다.
-- `api/hiringSim.js`: 기존 `api/graph.js`, `simulation.js`, `report.js` 함수를 순서대로 호출하고 폴링하는 오케스트레이션만 담당한다. 순수 함수 `buildSeedDoc`, `matchEvidence`도 여기에 둔다.
+- `lib/hiringSim.js`: 순수 함수(`buildSeedDoc`, `parseReport`, `matchEvidence`, `buildFeed`, `pollUntil` 등). node로 직접 검증하려고 axios/i18n 의존성이 없는 별도 파일에 둔다.
+- `api/hiringSim.js`: 기존 `api/graph.js`, `simulation.js`, `report.js`를 순서대로 호출하고 폴링하는 재개 가능한 오케스트레이션.
 
 ## 4. 입력 → 시드 문서
 
@@ -46,12 +47,13 @@ PRD 5번 흐름(시나리오 작성 → 지원자 구성 → 실행 전 확인 �
 - 각 단계는 상단 진행 표시줄에 표시한다.
 - 단계 실패 시 실패한 단계 이름과 백엔드 에러 메시지를 보여 주고 해당 단계부터 재시도할 수 있다.
 - 폴링 타이머는 컴포넌트 unmount 시 정리한다.
+- 리포트 완료 여부는 `getReport`를 폴링해 `status`로 판단한다(`api/report.js`의 `getReportStatus`는 백엔드 POST 라우트와 메서드가 달라 쓰지 않는다). 피드 플랫폼은 `reddit` 단일이다.
 
 ## 6. 피드
 
 - `/prepare` 완료 후 **실제 생성된 에이전트 목록**(`getSimulationProfiles`)을 보여 준다. A안에서는 선택한 프로필과 생성된 에이전트가 일치하지 않을 수 있으므로 이를 숨기지 않는다.
 - 피드는 `getSimulationPosts`와 댓글 API(`/simulation/{id}/comments`)를 폴링해 시간순으로 렌더링한다. 작성자 옆에 프로필 기반 짧은 라벨을 붙이고, 댓글은 원글 아래에 스레드로 표시한다.
-- `/posts`와 `/comments`가 돌려주는 필드(작성자 id, 부모 글/댓글 id, 시각)는 설계 시점에 확인하지 못했다. 구현 첫 단계에서 실제 응답을 확인하고 스레드 구성 방식을 확정한다.
+- DB 행(`post`: post_id, user_id, content, created_at / `comment`: comment_id, post_id, user_id, content)에는 작성자 이름이 없어, `/actions`의 CREATE_POST·CREATE_COMMENT 본문과 일치시켜 작성자 이름·라운드를 붙이고, 라벨은 프로필의 `profession` 또는 `bio` 앞부분을 쓴다. OASIS 댓글은 글 아래 평평하게 달리며 대댓글 id가 없다. 이 가정은 구현 계획의 Task 7에서 실제 실행으로 확인한다.
 
 ## 7. 리포트와 근거 추적
 
