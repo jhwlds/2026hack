@@ -1,44 +1,31 @@
 import assert from 'node:assert/strict'
 import {
-  validateScenario, validateFiles, pickApplicantTypes, buildSeedDoc, buildRequirement,
+  validateInput, pickApplicantTypes, buildRequirement,
   parseReport, matchEvidence, buildFeed, pollUntil
 } from './hiringSim.js'
 
-const scenario = {
-  role: 'Junior software engineer',
-  policy: '4-hour unpaid coding assignment',
-  details: 'Unpaid, evaluation criteria not disclosed',
-  question: 'What concerns will come up?',
-  context: ''
-}
-const profiles = [{ name: 'Minjun', title: 'First job search', description: 'Building a portfolio.', priorities: 'Time burden' }]
+// validateInput: one world seed file (pdf/md/txt/markdown, up to 50 MB) and one requirement text
+const seed = { name: 'Posting.PDF', size: 1000 }
+assert.deepEqual(validateInput('What concerns will come up?', seed), [])
+assert.deepEqual(validateInput('ok', { name: 'a.md', size: 5 }), [])
+assert.deepEqual(validateInput('ok', { name: 'b.markdown', size: 5 }), [])
+assert.deepEqual(validateInput('ok', { name: 'c.txt', size: 5 }), [])
+assert.deepEqual(validateInput('ok', null), ['Upload a world seed file.'])
+assert.deepEqual(validateInput('  ', seed), ['Describe what you want to simulate.'])
+assert.equal(validateInput('', null).length, 2)
+assert.equal(validateInput('ok', { name: 'posting.docx', size: 10 }).length, 1)
+assert.ok(validateInput('ok', { name: 'posting.docx', size: 10 })[0].includes('posting.docx'))
+assert.equal(validateInput('ok', { name: 'noextension', size: 10 }).length, 1)
+assert.equal(validateInput('ok', { name: 'a.pdf', size: 51 * 1024 * 1024 }).length, 1)
 
-// validate
-assert.equal(validateScenario({ role: '  ', policy: '', details: '', question: '' }).length, 4)
-assert.deepEqual(validateScenario(scenario), [])
-assert.equal(validateScenario({ ...scenario, role: ' ' })[0], 'Role / level is required.')
-
-// seed doc / requirement
-const doc = buildSeedDoc(scenario, profiles)
-assert.ok(doc.includes('4-hour unpaid coding assignment') && doc.includes('Top priorities: Time burden'))
-// each profile is one named individual, never a heading the graph could extract as an organization
-assert.ok(doc.includes('Individual job seeker Minjun (pseudonym)') && doc.includes('Situation: First job search'))
-assert.ok(!doc.includes('###'))
-assert.ok(!doc.includes('Company / hiring context'))
-assert.ok(buildSeedDoc({ ...scenario, context: 'A startup' }, profiles).includes('## Company / hiring context'))
-const req = buildRequirement(scenario)
-assert.ok(req.includes(scenario.question) && req.includes('Key summary') && req.includes('Improvements'))
+// buildRequirement: the user's own text comes first and is trimmed, then the fixed product instructions
+const req = buildRequirement('  What concerns will a 4-hour unpaid assignment cause?  ')
+assert.ok(req.startsWith('What concerns will a 4-hour unpaid assignment cause?\n'))
+assert.ok(req.includes('Key summary') && req.includes('Improvements'))
 assert.ok(req.includes('organizations or concepts such as the policy'))
 // the applicant entity types must be recognizable by name so /prepare can be limited to them
 assert.ok(req.includes("ending in 'JobSeeker'"))
-
-// validateFiles: allowed extensions only, 50 MB total, no files is fine
-assert.deepEqual(validateFiles([]), [])
-assert.deepEqual(validateFiles([{ name: 'Posting.PDF', size: 1000 }, { name: 'a.md', size: 5 }, { name: 'b.markdown', size: 5 }, { name: 'c.txt', size: 5 }]), [])
-assert.equal(validateFiles([{ name: 'posting.docx', size: 10 }]).length, 1)
-assert.ok(validateFiles([{ name: 'posting.docx', size: 10 }])[0].includes('posting.docx'))
-assert.equal(validateFiles([{ name: 'noextension', size: 10 }]).length, 1)
-assert.equal(validateFiles([{ name: 'a.pdf', size: 30 * 1024 * 1024 }, { name: 'b.pdf', size: 30 * 1024 * 1024 }]).length, 1)
+assert.ok(req.includes('verbatim excerpt'))
 
 // pickApplicantTypes: only entity types ending in JobSeeker; undefined means "do not filter"
 assert.deepEqual(

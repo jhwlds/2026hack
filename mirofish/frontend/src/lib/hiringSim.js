@@ -9,22 +9,19 @@ export const STAGE_LABELS = {
   report: 'Generating report'
 }
 
-const SCENARIO_FIELDS = { role: 'Role / level', policy: 'Hiring policy', details: 'Policy details', question: 'Simulation question' }
-
-export function validateScenario(scenario) {
-  return Object.entries(SCENARIO_FIELDS)
-    .filter(([key]) => !String(scenario[key] || '').trim())
-    .map(([, label]) => `${label} is required.`)
-}
-
 const ALLOWED_EXTENSIONS = ['pdf', 'md', 'txt', 'markdown'] // mirrors the backend's Config.ALLOWED_EXTENSIONS
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // mirrors the backend's MAX_CONTENT_LENGTH
 
-export function validateFiles(files) {
-  const errors = files
-    .filter(f => !ALLOWED_EXTENSIONS.includes(f.name.split('.').pop().toLowerCase()) || !f.name.includes('.'))
-    .map(f => `${f.name}: only PDF, MD, TXT and MARKDOWN files are supported.`)
-  if (files.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_BYTES) errors.push('The files are larger than 50 MB in total.')
+export const DEMO_REQUIREMENT = 'What concerns and positive reactions will the 4-hour unpaid coding assignment create in the job seeker community?'
+
+// The original MiroFish takes exactly two inputs: a world seed file and a requirement text.
+export function validateInput(requirement, file) {
+  const errors = []
+  if (!file) errors.push('Upload a world seed file.')
+  else if (!file.name.includes('.') || !ALLOWED_EXTENSIONS.includes(file.name.split('.').pop().toLowerCase())) {
+    errors.push(`${file.name}: only PDF, MD, TXT and MARKDOWN files are supported.`)
+  } else if (file.size > MAX_UPLOAD_BYTES) errors.push('The file is larger than 50 MB.')
+  if (!String(requirement || '').trim()) errors.push('Describe what you want to simulate.')
   return errors
 }
 
@@ -35,28 +32,11 @@ export function pickApplicantTypes(ontology) {
   return names.length ? names : undefined
 }
 
-export function buildSeedDoc(s, profiles) {
-  const lines = [
-    '# Hiring policy scenario (for a simulated community)', '',
-    '## Role / level', s.role.trim(), '',
-    '## Hiring policy', s.policy.trim(), '',
-    '## Policy details', s.details.trim(), ''
-  ]
-  if (s.context?.trim()) lines.push('## Company / hiring context', s.context.trim(), '')
-  lines.push('## Individual job seekers taking part in the discussion', 'The following are fictional individual job seekers discussing this policy.', '')
-  // One named individual per profile, as a sentence rather than a heading, so the graph builder
-  // extracts people instead of treating the profile title as an organization.
-  for (const p of profiles) {
-    lines.push(`- Individual job seeker ${p.name} (pseudonym). Situation: ${p.title}. ${p.description} Top priorities: ${p.priorities}`)
-  }
-  return lines.join('\n') + '\n'
-}
-
-export function buildRequirement(s) {
+// The user's text goes first; the fixed lines carry what this product needs from every run.
+export function buildRequirement(text) {
   return [
-    `Simulate how a community of fictional job seekers reacts to and discusses this hiring policy: ${s.policy.trim()}.`,
-    `Simulation question: ${s.question.trim()}`,
-    'The agents are the individual job seekers described in the scenario document; organizations or concepts such as the policy, the company or the community are not agents.',
+    text.trim(),
+    'The agents are the individual job seekers described in the seed document; organizations or concepts such as the policy, the company or the community are not agents.',
     "Name every entity type that represents an individual job seeker with a type name ending in 'JobSeeker' (for example JobSeeker), and give no other entity type such a name.",
     "Each job seeker posts an initial opinion after seeing the policy, then replies to, agrees with or pushes back on other job seekers' posts.",
     'Structure the report with these sections: Key summary; Recurring concerns and positive reactions; Points that strengthened or changed after other agents reacted; Where perspectives split; Improvements the company could consider.',

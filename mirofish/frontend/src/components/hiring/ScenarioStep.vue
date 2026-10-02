@@ -1,29 +1,18 @@
 <template>
   <section>
-    <h2>1. Write the scenario</h2>
+    <h2>1. Provide the seed and the question</h2>
     <div class="card">
-      <label class="field">Role / level
-        <input v-model="scenario.role" placeholder="e.g. Junior software engineer" />
-      </label>
-      <label class="field">Hiring policy
-        <input v-model="scenario.policy" placeholder="e.g. 4-hour coding assignment" />
-      </label>
-      <label class="field">Policy details
-        <textarea v-model="scenario.details" placeholder="Assignment length, compensation, whether evaluation criteria are disclosed, etc." />
-      </label>
-      <label class="field">Simulation question
-        <textarea v-model="scenario.question" placeholder="e.g. What concerns and positive reactions will this policy create in the job seeker community?" />
-      </label>
-      <label class="field">Company or hiring context (optional)
-        <textarea v-model="scenario.context" placeholder="A short background" />
-      </label>
-      <div class="field">Company context files (optional)
-        <input type="file" multiple accept=".pdf,.md,.txt,.markdown" @change="pick" />
-        <ul v-if="files.length" class="files">
-          <li v-for="(f, i) in files" :key="f.name + i">{{ f.name }} <button class="btn ghost" @click="files.splice(i, 1)">Remove</button></li>
-        </ul>
-        <span class="scope">A job posting or company description (PDF, MD, TXT). It becomes part of the simulated world, so the discussion refers to your company.</span>
+      <div class="field">World seed file
+        <input type="file" accept=".pdf,.md,.txt,.markdown" @change="pick" />
+        <span v-if="file" class="scope">{{ file.name }} ({{ Math.ceil(file.size / 1024) }} KB)</span>
+        <span class="scope">
+          A job posting or company description (PDF, MD, TXT). The entities in this file become the simulated world,
+          so include the job seekers who will take part, as individual people. See docs/samples/sample-job-posting.md.
+        </span>
       </div>
+      <label class="field">Simulation requirement
+        <textarea v-model="state.requirement" placeholder="What do you want to find out? e.g. What concerns will a 4-hour unpaid coding assignment cause?" />
+      </label>
       <p class="scope">Use fictional demo information only. Do not enter real personal data or sensitive hiring materials.</p>
       <p v-for="e in errors" :key="e" class="err">{{ e }}</p>
     </div>
@@ -35,21 +24,19 @@
 
 <script setup>
 import { ref } from 'vue'
-import { validateScenario, validateFiles } from '../../lib/hiringSim'
+import { validateInput } from '../../lib/hiringSim'
 
-const props = defineProps({
-  scenario: { type: Object, required: true },
-  files: { type: Array, required: true }
-})
+// state = { requirement: string, file: File | null }, owned by the page
+const props = defineProps({ state: { type: Object, required: true } })
 const emit = defineEmits(['next'])
+const file = ref(props.state.file)
 const errors = ref([])
 
 const pick = (e) => {
-  props.files.push(...e.target.files)
-  e.target.value = '' // allow picking the same file again after removing it
+  file.value = props.state.file = e.target.files[0] || null
 }
 const next = () => {
-  errors.value = [...validateScenario(props.scenario), ...validateFiles(props.files)]
+  errors.value = validateInput(props.state.requirement, props.state.file)
   if (!errors.value.length) emit('next')
 }
 </script>
