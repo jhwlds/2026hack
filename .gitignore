@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# IDE and local agent tools
+.idea/
+.vscode/
+.cursor/
+.claude/
+.serena/
+
+# Logs and test caches
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
