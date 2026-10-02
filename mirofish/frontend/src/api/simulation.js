@@ -199,3 +199,11 @@ export const getSimulationComments = (simulationId, platform, limit = 500, offse
   if (platform) params.platform = platform
   return service.get(`/api/simulation/${simulationId}/comments`, { params })
 }
+
+/**
+ * List the entities of a graph, with their labels
+ * @param {string} graphId
+ */
+export const getGraphEntities = (graphId) => {
+  return service.get(`/api/simulation/entities/${graphId}`)
+}

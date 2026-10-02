@@ -1,9 +1,11 @@
 import { generateOntology, buildGraph, getTaskStatus, getProject } from './graph'
 import {
-  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus, closeSimulationEnv
+  createSimulation, prepareSimulation, getPrepareStatus, startSimulation, getRunStatus, closeSimulationEnv, getGraphEntities
 } from './simulation'
 import { generateReport, getReport, getReportProgress } from './report'
-import { buildRequirement, pickApplicantTypes, pollUntil, runPhase, MAX_ROUNDS } from '../lib/hiringSim'
+import {
+  buildRequirement, buildApplicantsDoc, pickApplicantTypes, countApplicants, pollUntil, runPhase, MAX_ROUNDS
+} from '../lib/hiringSim'
 
 const taskFailed = (r) => r.data.status === 'failed' && (r.data.error || r.data.message || 'The task failed.')
 
@@ -15,6 +17,7 @@ export async function runPipeline({ requirement, file, state, signal, onStage, m
     await onStage('ontology')
     const form = new FormData()
     form.append('files', file, file.name) // the world seed
+    form.append('files', new Blob([buildApplicantsDoc()], { type: 'text/markdown' }), 'applicants.md') // a posting has no job seekers in it
     form.append('simulation_requirement', buildRequirement(requirement))
     form.append('project_name', `hiring-sim: ${file.name.slice(0, 30)}`)
     const ontology = (await generateOntology(form)).data
@@ -31,6 +34,13 @@ export async function runPipeline({ requirement, file, state, signal, onStage, m
 
   if (!state.prepared) {
     await onStage('prepare')
+    // Agents are created only from entities of the applicant types; with none, the backend fails with a Chinese message.
+    if (state.applicantTypes) {
+      const { entities } = (await getGraphEntities(state.graphId)).data
+      if (!countApplicants(entities, state.applicantTypes)) {
+        throw new Error('No individual job seekers were found in the simulated world, so there is nobody to run the discussion. Try again, or add a short description of the job seekers to your file.')
+      }
+    }
     state.simulationId ||= (await createSimulation({
       project_id: state.projectId,
       graph_id: state.graphId,

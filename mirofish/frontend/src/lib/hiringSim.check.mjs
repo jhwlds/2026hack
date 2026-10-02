@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  validateInput, pickApplicantTypes, buildRequirement, runPhase,
+  validateInput, pickApplicantTypes, countApplicants, APPLICANTS, buildApplicantsDoc, buildRequirement, runPhase,
   parseReport, dedupeReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
 } from './hiringSim.js'
 
@@ -44,6 +44,34 @@ assert.equal(runPhase({ runner_status: 'completed' }), 'done')
 assert.equal(runPhase({ runner_status: 'stopped' }), 'done')
 assert.equal(runPhase({ runner_status: 'failed', error: 'boom' }), 'failed')
 assert.equal(runPhase({ runner_status: 'idle' }), 'running')
+
+// buildApplicantsDoc: a posting or company description never contains job seekers, so the app adds them to the seed
+const doc = buildApplicantsDoc()
+assert.equal(APPLICANTS.length, 4)
+assert.equal(new Set(APPLICANTS.map(p => p.name)).size, 4)
+for (const p of APPLICANTS) assert.ok(doc.includes(`Individual job seeker ${p.name} (pseudonym).`), p.name)
+assert.equal(doc.split('Individual job seeker ').length - 1, 4)
+// individuals written as sentences, never as headings the graph could extract as organizations
+assert.ok(!doc.includes('###'))
+assert.ok(doc.includes('fictional'))
+// only job-search situations: no demographics, no country, and no assumption about what the policy is
+assert.ok(!/\b(male|female|man|woman|he|she|his|her|years? old|aged?)\b/i.test(doc), 'no gender or age')
+assert.ok(!/take-home|assignment|unpaid/i.test(doc), 'the applicants do not presuppose the question')
+assert.ok(!/[\u3400-\u9fff\uac00-\ud7a3]/.test(doc), 'English only')
+
+// countApplicants: how many graph entities carry one of the applicant entity types
+const ents = [
+  { name: 'Alex', labels: ['Entity', 'FirstJobJobSeeker'] },
+  { name: 'Neighbor', labels: ['Entity', 'Organization'] },
+  { name: 'Jordan', labels: ['JobSeeker'] },
+  { name: 'Odd', labels: [] },
+  { name: 'NoLabels' }
+]
+assert.equal(countApplicants(ents, ['FirstJobJobSeeker', 'JobSeeker']), 2)
+assert.equal(countApplicants(ents, ['JobSeeker']), 1)
+assert.equal(countApplicants(ents, ['SomethingElseJobSeeker']), 0)
+assert.equal(countApplicants([], ['JobSeeker']), 0)
+assert.equal(countApplicants(undefined, ['JobSeeker']), 0)
 
 // pickApplicantTypes: only entity types ending in JobSeeker; undefined means "do not filter"
 assert.deepEqual(

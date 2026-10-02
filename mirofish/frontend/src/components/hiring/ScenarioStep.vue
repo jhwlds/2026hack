@@ -6,8 +6,8 @@
         <input type="file" accept=".pdf,.md,.txt,.markdown" @change="pick" />
         <span v-if="file" class="scope">{{ file.name }} ({{ Math.ceil(file.size / 1024) }} KB)</span>
         <span class="scope">
-          A job posting or company description (PDF, MD, TXT). The entities in this file become the simulated world,
-          so include the job seekers who will take part, as individual people.
+          A job posting or company description (PDF, MD, TXT). The entities in this file become the simulated world.
+          Four fictional job seekers are added automatically; individual job seekers you describe in the file take part too.
         </span>
       </div>
       <label class="field">Simulation requirement

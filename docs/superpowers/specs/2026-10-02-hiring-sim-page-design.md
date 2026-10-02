@@ -21,8 +21,8 @@ PRD에서 **의도적으로 뺀 것**: 지원자 프로필의 선택·수정·�
 | 항목 | 결정 | 이유 |
 |---|---|---|
 | 데이터 소스 | 실제 MiroFish 백엔드 연동 (mock 없음) | 사용자 선택 |
-| 입력 | 월드 시드 파일 1개(PDF/MD/TXT/MARKDOWN, 50MB 이하, 필수) + 시뮬레이션 요구사항 텍스트 1개(필수) | 사용자 결정. 원래 MiroFish와 같은 입력 모델. 지난 실험에서 시나리오 필드로 쓴 직무·세부사항·회사 컨텍스트가 대화에 거의 반영되지 않았음 |
-| 지원자 | 시드 파일 안에 개인 구직자로 서술되어 있어야 함. 앱은 지원자를 만들거나 편집하지 않음 | 사용자 결정. 잡포스팅만 올리면 회사·담당자만 엔티티가 되므로 화면 안내로 알림(앱이 검사하지는 않음) |
+| 입력 | 월드 시드 파일 1개(PDF/MD/TXT/MARKDOWN, 50MB 이하, 필수) + 시뮬레이션 요구사항 텍스트 1개(필수). 사용자가 입력하는 것은 이 둘뿐이다 | 사용자 결정. 원래 MiroFish와 같은 입력 모델. 지난 실험에서 시나리오 필드로 쓴 직무·세부사항·회사 컨텍스트가 대화에 거의 반영되지 않았음 |
+| 지원자 | 앱이 고정된 가상 지원자 4명(Alex, Jordan, Taylor, Riley)을 설명하는 `applicants.md`를 시드 파일과 함께 자동으로 업로드한다. 화면에서 입력·편집하지 않고, 실행 전 확인 화면에 이름만 보여 준다. 시드 파일에 지원자 개인이 서술되어 있으면 그들도 참여한다 | 실제 채용 공고에는 사람이 없어 그래프가 회사·투자자·기술 스택(`Organization`)만 갖게 되고, 지원자 타입 필터 후 에이전트가 0개가 되어 실패했다(필터를 풀면 `React`, `Uber`가 에이전트가 됨). 원래 MiroFish도 참가자를 문서의 엔티티에서만 가져오며 LLM이 만드는 것은 소개글뿐이다 |
 | 요구사항 텍스트 | 사용자 텍스트를 맨 앞에 두고, 제품이 매 실행마다 필요한 고정 문장(에이전트는 개인 구직자, 타입 이름 규칙, PRD 8번 리포트 섹션, 원문 발췌 인용, 가상 분석 고지)을 뒤에 붙여 `simulation_requirement`로 보낸다 | 리포트 에이전트가 PRD의 목차와 인용 형식을 따르게 하기 위함 |
 | 에이전트 제한 | 요구사항에서 지원자 엔티티 타입 이름을 `JobSeeker`로 끝나게 요구하고, 온톨로지 결과에서 그 이름의 타입만 `/prepare`의 `entity_types`로 넘긴다. 일치하는 타입이 없으면 필터 없이 진행 | 첫 실행에서 정책·직무·커뮤니티가 에이전트로 생성됨. 실제로 시드 문서의 담당자 등은 제외되었음. LLM이 이름 규칙을 어길 수 있음 |
 | UI 재사용 | 기존 Step1~5 컴포넌트와 `GraphPanel` 미사용, `api/*.js`만 재사용 | 기존 컴포넌트는 파일이 크고 그래프 패널과 결합되어 있음 |
@@ -46,8 +46,11 @@ PRD에서 **의도적으로 뺀 것**: 지원자 프로필의 선택·수정·�
 
 ## 5. 파이프라인
 
-`generateOntology`(FormData: 파일 + 요구사항) → `buildGraph` → `getTaskStatus` 폴링 → `createSimulation` → `prepareSimulation`(`entity_types`) → `getPrepareStatus` 폴링 → `startSimulation` → `getRunStatus` 폴링 → `generateReport` → `getReport` 폴링
+지원자 파일(`buildApplicantsDoc`)은 지원자를 구직 상황(첫 취업, 재직 중 이직 준비, 여러 곳 동시 지원, 채용 과정 투명성 중시)으로만 구분하고 나이·성별·국가를 쓰지 않으며 정책이나 과제를 가정하지 않는다. 각 지원자는 소제목이 아니라 "Individual job seeker Alex (pseudonym). ..." 문장으로 써서, 그래프 구축 때 조직이 아니라 개인 엔티티로 뽑히게 한다.
 
+`generateOntology`(FormData: 시드 파일 + `applicants.md` + 요구사항) → `buildGraph` → `getTaskStatus` 폴링 → (지원자 엔티티 수 확인) → `createSimulation` → `prepareSimulation`(`entity_types`) → `getPrepareStatus` 폴링 → `startSimulation` → `getRunStatus` 폴링 → `generateReport` → `getReport` 폴링
+
+- 에이전트 생성 전에 `/simulation/entities/:graphId`로 지원자 타입 엔티티가 1개 이상인지 확인하고, 0개면 백엔드의 중국어 오류 대신 영어 안내와 재시도를 보여 준다.
 - 각 단계는 상단 진행 표시줄에 표시한다.
 - 단계 실패 시 실패한 단계 이름과 백엔드 에러 메시지를 보여 주고 해당 단계부터 재시도할 수 있다.
 - 폴링 타이머는 컴포넌트 unmount 시 정리한다.

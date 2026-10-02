@@ -34,6 +34,30 @@ export function runPhase(data) {
   return data.reddit_completed && data.twitter_completed ? 'closing' : 'running'
 }
 
+// A job posting or company description has no job seekers in it, so the app adds these to every seed as a second file.
+// They differ only in their job-search situation (not in age, gender or country) and say nothing about the policy.
+export const APPLICANTS = [
+  { name: 'Alex', situation: 'is preparing for a first job and building a portfolio. Alex has plenty of free time but little experience, so every application matters.' },
+  { name: 'Jordan', situation: 'works full-time and is preparing to switch jobs. Jordan can only spare weekday evenings and weekends, and values efficiency and flexibility.' },
+  { name: 'Taylor', situation: 'is applying to many companies at the same time. Taylor has to juggle overlapping schedules and decide which applications deserve the most effort.' },
+  { name: 'Riley', situation: 'cares about knowing how a hiring process works before investing in it. Riley wants clear expectations and reconsiders applying when they are missing.' }
+]
+
+export function buildApplicantsDoc() {
+  return [
+    '# Job seekers in the discussion',
+    '',
+    'The following are fictional individual job seekers who discuss this company and its hiring process in an online community.',
+    '',
+    ...APPLICANTS.map(p => `- Individual job seeker ${p.name} (pseudonym). ${p.name} ${p.situation}`),
+    ''
+  ].join('\n')
+}
+
+// How many graph entities (from GET /simulation/entities/:graphId) have one of the applicant entity types.
+export const countApplicants = (entities, types) =>
+  (entities || []).filter(e => (e.labels || []).some(l => types.includes(l))).length
+
 // Applicant agents are the entities whose type name ends in "JobSeeker" (the requirement text asks for that naming).
 // Returning undefined tells /prepare not to filter, which is the safe fallback when the model ignored the naming.
 export function pickApplicantTypes(ontology) {

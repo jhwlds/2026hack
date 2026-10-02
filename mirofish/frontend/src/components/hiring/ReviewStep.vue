@@ -8,7 +8,7 @@
       </dl>
     </div>
     <p class="scope">
-      The agents are created from the entities found in the seed file, limited to individual job seekers.
+      The agents are individual job seekers: four fictional ones added automatically ({{ names }}), plus any described in the seed file.
       Results are a qualitative analysis of fictional agents' conversations, shaped by that seed. The discussion runs for up to
       {{ MAX_ROUNDS }} rounds. Do not read it as real applicant behavior or as a causal effect of the policy. A run can take several minutes.
     </p>
@@ -20,7 +20,9 @@
 </template>
 
 <script setup>
-import { MAX_ROUNDS } from '../../lib/hiringSim'
+import { MAX_ROUNDS, APPLICANTS } from '../../lib/hiringSim'
+
+const names = APPLICANTS.map(p => p.name).join(', ')
 
 defineProps({ state: { type: Object, required: true } })
 defineEmits(['back', 'start'])
