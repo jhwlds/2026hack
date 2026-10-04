@@ -76,6 +76,10 @@ def _coerce_to_str_list(value: Any) -> List[str]:
     return [text] if text else []
 
 
+# Every simulated person is placed in the same country on purpose; it is not left to the model.
+PROFILE_COUNTRY = "United States"
+
+
 @dataclass
 class OasisAgentProfile:
     """OASIS Agent Profile数据结构"""
@@ -114,7 +118,7 @@ class OasisAgentProfile:
         self.persona = _coerce_to_str(self.persona) or (
             f"{self.name} is a participant in social discussions."
         )
-        self.country = _coerce_to_str(self.country) or None
+        self.country = PROFILE_COUNTRY  # fixed for every agent, whatever the model or a fallback wrote
         self.profession = _coerce_to_str(self.profession) or None
         self.gender = _coerce_to_str(self.gender) or None
         self.mbti = _coerce_to_str(self.mbti) or None
@@ -220,12 +224,6 @@ class OasisProfileGenerator:
         "INFJ", "INFP", "ENFJ", "ENFP",
         "ISTJ", "ISFJ", "ESTJ", "ESFJ",
         "ISTP", "ISFP", "ESTP", "ESFP"
-    ]
-    
-    # 常见国家列表
-    COUNTRIES = [
-        "China", "US", "UK", "Japan", "Germany", "France", 
-        "Canada", "Australia", "Brazil", "India", "South Korea"
     ]
     
     # 个人类型实体（需要生成具体人设）
@@ -755,7 +753,7 @@ class OasisProfileGenerator:
 3. age: 年龄数字（必须是整数）
 4. gender: 性别，必须是英文: "male" 或 "female"
 5. mbti: MBTI类型（如INTJ、ENFP等）
-6. country: 国家（使用中文，如"中国"）
+6. country: 国家（固定填写 "United States"）
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
@@ -804,7 +802,7 @@ class OasisProfileGenerator:
 3. age: 固定填30（机构账号的虚拟年龄）
 4. gender: 固定填"other"（机构账号使用other表示非个人）
 5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家（使用中文，如"中国"）
+6. country: 国家（固定填写 "United States"）
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
 
@@ -834,7 +832,7 @@ class OasisProfileGenerator:
                 "age": random.randint(18, 30),
                 "gender": random.choice(["male", "female"]),
                 "mbti": random.choice(self.MBTI_TYPES),
-                "country": random.choice(self.COUNTRIES),
+                "country": PROFILE_COUNTRY,
                 "profession": "Student",
                 "interested_topics": ["Education", "Social Issues", "Technology"],
             }
@@ -846,7 +844,7 @@ class OasisProfileGenerator:
                 "age": random.randint(35, 60),
                 "gender": random.choice(["male", "female"]),
                 "mbti": random.choice(["ENTJ", "INTJ", "ENTP", "INTP"]),
-                "country": random.choice(self.COUNTRIES),
+                "country": PROFILE_COUNTRY,
                 "profession": entity_attributes.get("occupation", "Expert"),
                 "interested_topics": ["Politics", "Economics", "Culture & Society"],
             }
@@ -858,7 +856,7 @@ class OasisProfileGenerator:
                 "age": 30,  # 机构虚拟年龄
                 "gender": "other",  # 机构使用other
                 "mbti": "ISTJ",  # 机构风格：严谨保守
-                "country": "中国",
+                "country": PROFILE_COUNTRY,
                 "profession": "Media",
                 "interested_topics": ["General News", "Current Events", "Public Affairs"],
             }
@@ -870,7 +868,7 @@ class OasisProfileGenerator:
                 "age": 30,  # 机构虚拟年龄
                 "gender": "other",  # 机构使用other
                 "mbti": "ISTJ",  # 机构风格：严谨保守
-                "country": "中国",
+                "country": PROFILE_COUNTRY,
                 "profession": entity_type,
                 "interested_topics": ["Public Policy", "Community", "Official Announcements"],
             }
@@ -883,7 +881,7 @@ class OasisProfileGenerator:
                 "age": random.randint(25, 50),
                 "gender": random.choice(["male", "female"]),
                 "mbti": random.choice(self.MBTI_TYPES),
-                "country": random.choice(self.COUNTRIES),
+                "country": PROFILE_COUNTRY,
                 "profession": entity_type,
                 "interested_topics": ["General", "Social Issues"],
             }
@@ -1220,7 +1218,7 @@ class OasisProfileGenerator:
                 "age": profile.age if profile.age else 30,
                 "gender": self._normalize_gender(profile.gender),
                 "mbti": profile.mbti if profile.mbti else "ISTJ",
-                "country": profile.country if profile.country else "中国",
+                "country": profile.country,
             }
             
             # 可选字段

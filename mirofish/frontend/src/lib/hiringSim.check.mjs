@@ -1,0 +1,291 @@
+import assert from 'node:assert/strict'
+import {
+  validateInput, pickApplicantTypes, countApplicants, validateApplicants, fallbackApplicants, MIN_APPLICANTS, MAX_APPLICANTS, DEFAULT_APPLICANT_COUNT, APPLICANTS, STAGE_LABELS, buildApplicantsDoc, buildRequirement, runPhase,
+  parseReport, dedupeReport, matchEvidence, buildTimeline, evidenceItems, summarizeRun, pollUntil
+} from './hiringSim.js'
+
+// validateInput: one world seed file (pdf/md/txt/markdown, up to 50 MB) and one requirement text
+const seed = { name: 'Posting.PDF', size: 1000 }
+assert.deepEqual(validateInput('What concerns will come up?', seed), [])
+assert.deepEqual(validateInput('ok', { name: 'a.md', size: 5 }), [])
+assert.deepEqual(validateInput('ok', { name: 'b.markdown', size: 5 }), [])
+assert.deepEqual(validateInput('ok', { name: 'c.txt', size: 5 }), [])
+assert.deepEqual(validateInput('ok', null), ['Upload a world seed file.'])
+assert.deepEqual(validateInput('  ', seed), ['Describe what you want to simulate.'])
+assert.equal(validateInput('', null).length, 2)
+assert.equal(validateInput('ok', { name: 'posting.docx', size: 10 }).length, 1)
+assert.ok(validateInput('ok', { name: 'posting.docx', size: 10 })[0].includes('posting.docx'))
+assert.equal(validateInput('ok', { name: 'noextension', size: 10 }).length, 1)
+assert.equal(validateInput('ok', { name: 'a.pdf', size: 51 * 1024 * 1024 }).length, 1)
+
+// the number of job seekers: optional, 2 to 8, default 4
+assert.deepEqual([MIN_APPLICANTS, DEFAULT_APPLICANT_COUNT, MAX_APPLICANTS], [2, 4, 8])
+assert.deepEqual(validateInput('ok', seed, 2), [])
+assert.deepEqual(validateInput('ok', seed, 8), [])
+assert.deepEqual(validateInput('ok', seed), []) // not given: the default is used
+assert.deepEqual(validateInput('ok', seed, undefined), [])
+for (const bad of [1, 9, 0, -1, 4.5, '4', '', NaN, null, true]) {
+  assert.deepEqual(validateInput('ok', seed, bad), ['The number of job seekers must be a whole number between 2 and 8.'], String(bad))
+}
+assert.equal(validateInput('', null, 99).length, 3) // the problems add up
+
+// buildRequirement: the user's own text comes first and is trimmed, then the fixed product instructions
+const req = buildRequirement('  What concerns will a 4-hour unpaid assignment cause?  ')
+assert.ok(req.startsWith('What concerns will a 4-hour unpaid assignment cause?\n'))
+// the report must stay short: few sections, a word budget, one-sentence bullets, short quotes copied word for word
+assert.ok(req.includes('exactly 3 sections') && req.includes('250 words'))
+// each section writer receives this whole text, so it must say that a section holds only its own content
+assert.ok(req.includes('only its own content') && req.includes('never repeat'))
+assert.ok(!req.includes('Use these sections'))
+assert.ok(req.includes('Key summary') && req.includes('Concerns and reactions') && req.includes('Improvements'))
+assert.ok(req.includes('one-sentence bullets') && req.includes('word for word'))
+assert.ok(!req.includes('Where perspectives split')) // the old five-section list is gone
+assert.ok(req.includes('organizations or concepts such as the policy'))
+// the applicant entity types must be recognizable by name so /prepare can be limited to them
+assert.ok(req.includes("ending in 'JobSeeker'"))
+assert.ok(req.includes('verbatim excerpt'))
+
+// runPhase: the parallel runner keeps its process alive in a wait-for-commands mode after both platforms finish,
+// so the run only reaches 'completed' once the environment is closed
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: false, twitter_completed: false }), 'running')
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: true, twitter_completed: false }), 'running')
+assert.equal(runPhase({ runner_status: 'running', reddit_completed: true, twitter_completed: true }), 'closing')
+assert.equal(runPhase({ runner_status: 'stopping', reddit_completed: true, twitter_completed: true }), 'stopping')
+assert.equal(runPhase({ runner_status: 'completed' }), 'done')
+assert.equal(runPhase({ runner_status: 'stopped' }), 'done')
+assert.equal(runPhase({ runner_status: 'failed', error: 'boom' }), 'failed')
+assert.equal(runPhase({ runner_status: 'idle' }), 'running')
+
+// buildApplicantsDoc: a posting or company description never contains job seekers, so the app adds them to the seed
+const doc = buildApplicantsDoc()
+assert.equal(APPLICANTS.length, 4)
+assert.equal(new Set(APPLICANTS.map(p => p.name)).size, 4)
+for (const p of APPLICANTS) {
+  assert.ok(doc.includes(`Individual job seeker ${p.name} (pseudonym). ${p.situation} ${p.persona}`), p.name)
+  assert.ok(p.situation.startsWith(p.name) && p.persona.length > 40, `${p.name} has a full situation and a persona`)
+}
+assert.equal(doc.split('Individual job seeker ').length - 1, 4)
+// individuals written as sentences, never as headings the graph could extract as organizations
+assert.ok(!doc.includes('###'))
+assert.ok(doc.includes('fictional'))
+// only job-search situations: no demographics, no country, and no assumption about what the policy is
+assert.ok(!/\b(male|female|man|woman|he|she|his|her|years? old|aged?)\b/i.test(doc), 'no gender or age')
+assert.ok(!/take-home|assignment|unpaid/i.test(doc), 'the applicants do not presuppose the question')
+assert.ok(!/[\u3400-\u9fff\uac00-\ud7a3]/.test(doc), 'English only')
+// the document is built from whatever applicants it is given: the ones the model generated for this posting
+const generated = [
+  { name: 'Morgan', situation: 'Morgan left a large company and wants more ownership.', persona: 'Morgan is direct and asks about expectations in forums.' },
+  { name: 'Casey', situation: 'Casey leads projects and avoids on-site only roles.', persona: 'Casey is candid and shares application experiences.' }
+]
+const custom = buildApplicantsDoc(generated)
+assert.ok(custom.includes('Individual job seeker Morgan (pseudonym). Morgan left a large company and wants more ownership. Morgan is direct'))
+assert.equal(custom.split('Individual job seeker ').length - 1, 2)
+assert.ok(!custom.includes('Alex'))
+
+// validateApplicants: what the server returned must have the shape the document and the agents depend on
+const four = [
+  { name: 'Morgan', situation: 'Morgan situation text here.', persona: 'Morgan persona text here, long enough.' },
+  { name: 'Casey', situation: 'Casey situation text here.', persona: 'Casey persona text here, long enough.' },
+  { name: 'Jamie', situation: 'Jamie situation text here.', persona: 'Jamie persona text here, long enough.' },
+  { name: 'Alex', situation: 'Alex situation text here.', persona: 'Alex persona text here, long enough.' }
+]
+assert.deepEqual(validateApplicants(four), [])
+assert.equal(validateApplicants(four.slice(0, 3)).length, 1)
+assert.equal(validateApplicants(undefined).length, 1)
+// ...and it has to be the number that was asked for
+assert.deepEqual(validateApplicants(four, 4), [])
+assert.match(validateApplicants(four, 6)[0], /exactly 6/)
+assert.deepEqual(validateApplicants(four.slice(0, 2), 2), [])
+assert.match(validateApplicants(four, 2)[0], /exactly 2/)
+assert.equal(validateApplicants('four').length, 1)
+assert.equal(validateApplicants([]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), { ...four[0] }]).length, 1) // duplicate name
+assert.equal(validateApplicants([...four.slice(0, 3), { name: 'Riley', situation: '', persona: 'x'.repeat(50) }]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), { name: 'Riley', situation: 'ok situation', persona: 7 }]).length, 1)
+assert.equal(validateApplicants([...four.slice(0, 3), null]).length, 1)
+
+// fallbackApplicants: the fixed job seekers used when generating fails; there are only four of them
+assert.deepEqual(fallbackApplicants(4).applicants, APPLICANTS)
+assert.deepEqual(fallbackApplicants(2).applicants.map(a => a.name), ['Alex', 'Jordan'])
+assert.equal(fallbackApplicants(3).applicants.length, 3)
+assert.equal(fallbackApplicants(4).shortBy, 0)
+assert.equal(fallbackApplicants(7).applicants.length, 4)
+assert.equal(fallbackApplicants(7).shortBy, 3)
+assert.equal(fallbackApplicants(8).shortBy, 4)
+assert.notEqual(fallbackApplicants(4).applicants, APPLICANTS) // a copy, so callers cannot change the defaults
+
+// the pipeline shows a stage for it, before the scenario is analyzed
+assert.deepEqual(Object.keys(STAGE_LABELS).slice(0, 2), ['applicants', 'ontology'])
+
+// countApplicants: how many graph entities carry one of the applicant entity types
+const ents = [
+  { name: 'Alex', labels: ['Entity', 'FirstJobJobSeeker'] },
+  { name: 'Neighbor', labels: ['Entity', 'Organization'] },
+  { name: 'Jordan', labels: ['JobSeeker'] },
+  { name: 'Odd', labels: [] },
+  { name: 'NoLabels' }
+]
+assert.equal(countApplicants(ents, ['FirstJobJobSeeker', 'JobSeeker']), 2)
+assert.equal(countApplicants(ents, ['JobSeeker']), 1)
+assert.equal(countApplicants(ents, ['SomethingElseJobSeeker']), 0)
+assert.equal(countApplicants([], ['JobSeeker']), 0)
+assert.equal(countApplicants(undefined, ['JobSeeker']), 0)
+
+// pickApplicantTypes: only entity types ending in JobSeeker; undefined means "do not filter"
+assert.deepEqual(
+  pickApplicantTypes({ entity_types: [{ name: 'JobSeeker' }, { name: 'EvaluationCriteriaFocusedJobSeeker' }, { name: 'Company' }, { name: 'Person' }] }),
+  ['JobSeeker', 'EvaluationCriteriaFocusedJobSeeker']
+)
+assert.equal(pickApplicantTypes({ entity_types: [{ name: 'Company' }, { name: 'Person' }] }), undefined)
+assert.equal(pickApplicantTypes({ entity_types: [] }), undefined)
+assert.equal(pickApplicantTypes(undefined), undefined)
+
+// parseReport: block types, empty quotes dropped, ** stripped, raw HTML kept as plain text
+const blocks = parseReport('# Title\n\nText **bold**\n>\n> "A quote that is long enough"\n- item\n<script>alert(1)</script>')
+assert.deepEqual(blocks.map(b => b.type), ['heading', 'paragraph', 'quote', 'item', 'paragraph'])
+assert.equal(blocks[1].text, 'Text bold')
+assert.equal(blocks[4].text, '<script>alert(1)</script>')
+assert.deepEqual(parseReport(''), [])
+// quotation marks inside a bullet or paragraph are picked out so they can be linked to their source too
+const inline = parseReport('- Haeun said "a 4-hour assignment is excessive for juniors" and \u201Ca red flag\u201D too\nPlain sentence without quotes.\n> "A block quote that is long enough"\n## Heading with "quotes in it here"')
+assert.deepEqual(inline[0].quotes, ['a 4-hour assignment is excessive for juniors', 'a red flag'])
+assert.deepEqual(inline[1].quotes, [])
+assert.equal(inline[2].quotes, undefined) // a quote block is already a quote
+assert.equal(inline[3].quotes, undefined) // headings carry none
+
+// dedupeReport: the report writer sometimes puts the whole report in the first section and then writes the others again
+const repeated = [
+  '# Title', '', '> One line.', '', '---', '',
+  '## Key summary', '', '**Key summary** ', '', 'The summary text.', '',
+  '**Concerns and reactions**', '', '- Concern A', '  > "quote a"', '', '- Concern B', '',
+  '**Improvements**', '', '- Fix A', '',
+  '## Concerns and reactions', '', '- Concern A again', '',
+  '## Improvements', '', 'Fix A again.', ''
+].join('\n')
+const once = dedupeReport(repeated)
+assert.deepEqual(parseReport(once).filter(b => b.type === 'heading').map(b => [b.level, b.text]),
+  [[1, 'Title'], [2, 'Key summary'], [3, 'Concerns and reactions'], [3, 'Improvements']])
+assert.ok(once.includes('The summary text.') && once.includes('- Concern B') && once.includes('- Fix A'))
+assert.ok(!once.includes('again'), 'the later sections that repeat the first one are dropped')
+assert.equal(once.split('Concern A').length - 1, 1)
+assert.ok(once.includes('> "quote a"'))
+assert.ok(once.startsWith('# Title\n\n> One line.'))
+// labels match whatever the case and spacing of the section titles
+assert.ok(!dedupeReport('## Key Summary\n\n**Key summary**\n\nS.\n\n**Concerns And Reactions**\n\n- C\n\n## concerns and reactions\n\n- C2\n').includes('C2'))
+// a section that was not part of the first section stays
+const extra = dedupeReport('## Key summary\n\n**Concerns and reactions**\n\n- C\n\n## Concerns and reactions\n\n- C2\n\n## Methodology\n\nHow it was run.\n')
+assert.ok(extra.includes('How it was run.') && !extra.includes('C2'))
+// reports without that pattern are returned untouched
+const distinct = '# T\n\n## Key summary\n\nS.\n\n## Concerns and reactions\n\n- C\n\n## Improvements\n\n- I\n'
+assert.equal(dedupeReport(distinct), distinct)
+const ownMarkerOnly = '## Key summary\n\n**Key summary**\n\nS.\n\n## Improvements\n\n- I\n'
+assert.equal(dedupeReport(ownMarkerOnly), ownMarkerOnly)
+assert.equal(dedupeReport(''), '')
+assert.equal(dedupeReport('No headings at all.'), 'No headings at all.')
+assert.equal(dedupeReport(undefined), '')
+
+// matchEvidence
+const items = [
+  { key: 'p1', content: 'Four hours is too long. Even worse if it is unpaid' },
+  { key: 'c2', content: 'If the criteria are not published it feels unfair' }
+]
+assert.equal(matchEvidence('"Four hours is too long" — Agent A', items), 'p1')
+assert.equal(matchEvidence('"If the criteria are not published ... feels unfair"', items), 'c2')
+assert.equal(matchEvidence('"An entirely unrelated remark made at length"', items), null)
+// the report model often drops small words from a quote; the words must still appear in order in one post or comment
+const dropped = [{ key: 'c7', content: 'Honestly the total time investment is simply too high for me right now' }]
+assert.equal(matchEvidence('"the total time investment too high"', dropped), 'c7')
+// a paraphrase that only shares some words is not evidence
+assert.equal(matchEvidence('"time investment is the biggest problem for applicants"', dropped), null)
+// words in the wrong order are not a quote
+assert.equal(matchEvidence('"high too investment time total the"', dropped), null)
+// too short to identify a source
+assert.equal(matchEvidence('"too high"', dropped), null)
+// the best-covered source wins when several share words
+assert.equal(matchEvidence('"the total time investment is simply too high"', [{ key: 'x', content: 'the total time is a lot' }, ...dropped]), 'c7')
+assert.equal(matchEvidence('ok', items), null)
+assert.equal(matchEvidence('', items), null)
+
+// buildTimeline: the original MiroFish action cards, in time order, joined with the DB rows that know who replied to whom
+const actions = [
+  { action_type: 'CREATE_COMMENT', agent_id: 1, agent_name: 'Lee', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:07.4', action_args: { comment_id: '12', content: 'I agree' } },
+  { action_type: 'CREATE_POST', agent_id: 0, agent_name: 'Kim', round_num: 1, platform: 'reddit', timestamp: '2026-10-02T14:03:05.5', action_args: { content: 'First post', post_id: '1' } },
+  { action_type: 'LIKE_POST', agent_id: 1, agent_name: 'Lee', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:08.0', action_args: {} },
+  { action_type: 'QUOTE_POST', agent_id: 2, agent_name: 'Park', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:09.0', action_args: { quote_content: 'Quoting this' } },
+  { action_type: 'CREATE_COMMENT', agent_id: 0, agent_name: 'Kim', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:10.0', action_args: { comment_id: '13', content: 'Replying to myself' } },
+  { action_type: 'CREATE_COMMENT', agent_id: 2, agent_name: 'Park', round_num: 2, platform: 'reddit', timestamp: '2026-10-02T14:03:11.0', action_args: { comment_id: '99', content: 'No database row for me' } }
+]
+const db = {
+  posts: [{ post_id: 1, user_id: 0, content: 'First post' }],
+  comments: [
+    { comment_id: 12, post_id: 1, user_id: 1, content: 'I agree' },
+    { comment_id: 13, post_id: 1, user_id: 0, content: 'Replying to myself' }
+  ],
+  profiles: [{ name: 'Kim', profession: 'Junior developer' }, { name: 'Lee', bio: 'Employed and preparing to switch jobs.' }]
+}
+const timeline = buildTimeline(actions, db)
+assert.deepEqual(timeline.map(t => t.action_type), ['CREATE_POST', 'CREATE_COMMENT', 'LIKE_POST', 'QUOTE_POST', 'CREATE_COMMENT', 'CREATE_COMMENT'])
+assert.equal(new Set(timeline.map(t => t.key)).size, timeline.length)
+assert.deepEqual(timeline.map(t => t.text), ['First post', 'I agree', '', 'Quoting this', 'Replying to myself', 'No database row for me'])
+assert.equal(timeline[0].label, 'Junior developer')
+assert.equal(timeline[1].label, 'Employed and preparing to switch jobs.')
+assert.equal(timeline[3].label, '')
+// comments are joined to their post through the database comment row
+assert.equal(timeline[1].replyToName, 'Kim')
+assert.equal(timeline[1].selfReply, false)
+assert.equal(timeline[4].replyToName, 'Kim')
+assert.equal(timeline[4].selfReply, true)
+// no database row: the card still renders, without reply information
+assert.equal(timeline[5].replyToName, undefined)
+assert.equal(timeline[5].selfReply, false)
+assert.deepEqual(buildTimeline([], { posts: [], comments: [], profiles: [] }), [])
+assert.equal(actions[0].action_type, 'CREATE_COMMENT') // the input is not reordered in place
+
+// evidenceItems: only cards with text can be evidence
+assert.deepEqual(evidenceItems(timeline).map(e => e.content), ['First post', 'I agree', 'Quoting this', 'Replying to myself', 'No database row for me'])
+assert.equal(evidenceItems(timeline)[0].key, timeline[0].key)
+
+// summarizeRun: what a history card shows for one past simulation (fields of GET /simulation/history)
+const run = {
+  simulation_id: 'sim_1', project_id: 'proj_1', status: 'completed', created_at: '2026-10-02',
+  simulation_requirement: 'What concerns will a 4-hour unpaid coding assignment cause?\nThe agents are the individual job seekers described in the seed document.',
+  files: [{ filename: 'posting.pdf' }, { filename: 'notes.md' }], current_round: 2, total_rounds: 6, report_id: 'report_1'
+}
+const sum = summarizeRun(run)
+assert.equal(sum.title, 'What concerns will a 4-hour unpaid coding assignment cause?') // only the user's own first line
+assert.equal(sum.files, 'posting.pdf, notes.md')
+assert.equal(sum.rounds, '2/6 rounds')
+assert.equal(sum.hasReport, true)
+assert.equal(sum.date, '2026-10-02')
+assert.equal(summarizeRun({ ...run, created_at: '2026-10-02T13:14:22.911907' }).date, '2026-10-02') // the API sends a full timestamp
+assert.equal(summarizeRun({ ...run, simulation_requirement: 'x'.repeat(200) }).title, 'x'.repeat(90) + '…')
+assert.equal(summarizeRun({ simulation_id: 's' }).title, 'Untitled run')
+assert.equal(summarizeRun({ simulation_id: 's' }).files, 'No files')
+assert.equal(summarizeRun({ simulation_id: 's' }).rounds, 'No rounds yet')
+assert.equal(summarizeRun({ simulation_id: 's', report_id: null }).hasReport, false)
+assert.equal(summarizeRun({ simulation_id: 's', total_rounds: 0 }).rounds, 'No rounds yet')
+
+// pollUntil
+let n = 0
+assert.equal(await pollUntil(async () => ++n, { isDone: v => v >= 3, isFailed: () => false, intervalMs: 1 }), 3)
+await assert.rejects(
+  pollUntil(async () => 'x', { isDone: () => false, isFailed: () => 'failed hard', intervalMs: 1 }),
+  /failed hard/
+)
+const ac = new AbortController()
+ac.abort()
+await assert.rejects(
+  pollUntil(async () => 1, { isDone: () => false, isFailed: () => false, intervalMs: 1, signal: ac.signal }),
+  /aborted/
+)
+let k = 0
+assert.equal(
+  await pollUntil(async () => { if (++k < 3) throw new Error('net'); return k }, { isDone: () => true, isFailed: () => false, intervalMs: 1 }),
+  3
+)
+await assert.rejects(
+  pollUntil(async () => { throw new Error('down') }, { isDone: () => true, isFailed: () => false, intervalMs: 1, maxErrors: 3 }),
+  /down/
+)
+
+console.log('hiringSim checks ok')

@@ -7,14 +7,40 @@ gracefully adapting request parameters for GPT-5 family models.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 
+# "gpt-5", "gpt-5.1", "gpt-6-luna", "gpt-10-large": a numbered GPT family from 5 on. These models take
+# `max_completion_tokens` and only the default temperature, like GPT-5 (checked against gpt-6-luna).
+_NUMBERED_GPT = re.compile(r"^gpt-(\d+)(?![\d])")
+_FIRST_FAMILY_WITH_NEW_PARAMETERS = 5
+
+
 def is_gpt5_family(model: Optional[str]) -> bool:
-    """Return True when model belongs to GPT-5 family aliases/snapshots."""
+    """Return True for GPT-5 and later numbered GPT families (aliases and snapshots)."""
     if not model:
         return False
-    return model.strip().lower().startswith("gpt-5")
+    match = _NUMBERED_GPT.match(model.strip().lower())
+    return bool(match) and int(match.group(1)) >= _FIRST_FAMILY_WITH_NEW_PARAMETERS
+
+
+_FIRST_FAMILY_REJECTING_TOOLS_WITH_REASONING = 6
+
+
+def agent_model_config(model: Optional[str]) -> Dict[str, Any]:
+    """
+    Extra request settings for the model the simulated agents run on.
+
+    The agents pick their actions through function tools. gpt-5.6-luna and GPT-6+ answer those requests with a 400
+    unless reasoning_effort is "none", so the agents could post once and never act again. Other GPT-5 models keep
+    their default configuration.
+    """
+    normalized = (model or "").strip().lower()
+    match = _NUMBERED_GPT.match(normalized)
+    if normalized == "gpt-5.6-luna" or match and int(match.group(1)) >= _FIRST_FAMILY_REJECTING_TOOLS_WITH_REASONING:
+        return {"reasoning_effort": "none"}
+    return {}
 
 
 def create_chat_completion(

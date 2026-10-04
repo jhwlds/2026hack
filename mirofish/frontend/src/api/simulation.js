@@ -186,3 +186,38 @@ export const interviewAgents = (data) => {
 export const getSimulationHistory = (limit = 20) => {
   return service.get('/api/simulation/history', { params: { limit } })
 }
+
+/**
+ * Get comments in a simulation
+ * @param {string} simulationId
+ * @param {string} [platform] - 'reddit' | 'twitter' (backend picks one from the simulation config when omitted)
+ * @param {number} limit - max rows to return
+ * @param {number} offset - row offset
+ */
+export const getSimulationComments = (simulationId, platform, limit = 500, offset = 0) => {
+  const params = { limit, offset }
+  if (platform) params.platform = platform
+  return service.get(`/api/simulation/${simulationId}/comments`, { params })
+}
+
+/**
+ * List the entities of a graph, with their labels
+ * @param {string} graphId
+ */
+export const getGraphEntities = (graphId) => {
+  return service.get(`/api/simulation/entities/${graphId}`)
+}
+
+/**
+ * Generate fictional job seekers (name, situation, persona) for an uploaded seed file
+ * @param {File} file - the world seed
+ * @param {string} requirement - the question the simulation will answer
+ * @param {number} count - how many job seekers to generate (2 to 8)
+ */
+export const suggestApplicants = (file, requirement, count) => {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  form.append('simulation_requirement', requirement)
+  form.append('count', String(count))
+  return service.post('/api/simulation/suggest-applicants', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+}

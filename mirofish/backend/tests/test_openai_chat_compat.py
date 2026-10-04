@@ -4,6 +4,7 @@ import pytest
 
 from app.utils.openai_chat_compat import (
     create_chat_completion,
+    agent_model_config,
     extract_chat_completion_text,
     is_gpt5_family,
 )
@@ -121,3 +122,66 @@ def test_extracts_text_from_supported_content_shapes():
 
     assert extract_chat_completion_text(response) == "first second third"
     assert extract_chat_completion_text(SimpleNamespace(choices=[])) == ""
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5", "GPT-5", " gpt-5.1 ", "gpt-5-2025-08-07", "gpt-6-luna", "gpt-6.0-luna", "gpt-7", "gpt-10-large"],
+)
+def test_gpt5_and_later_numbered_families_need_the_gpt5_request_shape(model):
+    assert is_gpt5_family(model)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gpt-4o-mini", "gpt-4.1", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
+        "gpt-", "gpt", "gpt-x", "gpt-luna", "mygpt-6", "qwen-plus", "third-party-chat-model", "", None,
+    ],
+)
+def test_earlier_and_unrelated_models_keep_the_legacy_request_shape(model):
+    assert not is_gpt5_family(model)
+
+
+def test_a_later_family_model_gets_max_completion_tokens_and_no_temperature():
+    recorder = CompletionRecorder()
+    messages = [{"role": "user", "content": "hello"}]
+
+    create_chat_completion(
+        client_for(recorder),
+        model="gpt-6-luna",
+        messages=messages,
+        temperature=0.3,
+        max_tokens=789,
+        response_format={"type": "json_object"},
+    )
+
+    assert recorder.calls == [
+        {
+            "model": "gpt-6-luna",
+            "messages": messages,
+            "max_completion_tokens": 789,
+            "response_format": {"type": "json_object"},
+        }
+    ]
+
+
+# The simulated agents choose their actions through function tools. These models reject tools unless reasoning_effort
+# is "none" ("Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'").
+@pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-6-luna", "gpt-6.0-luna", " GPT-6 ", "gpt-7", "gpt-10-large"])
+def test_models_that_reject_reasoning_with_tools_turn_reasoning_off(model):
+    assert agent_model_config(model) == {"reasoning_effort": "none"}
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5", "gpt-5.1", "gpt-5-2025-08-07", "gpt-4o-mini", "gpt-4.1", "qwen-plus", "third-party-chat-model", "gpt-luna", "", None],
+)
+def test_every_other_model_keeps_the_default_agent_configuration(model):
+    assert agent_model_config(model) == {}
+
+
+def test_each_call_returns_its_own_dict_so_a_caller_cannot_change_the_next_one():
+    first = agent_model_config("gpt-6-luna")
+    first["temperature"] = 0.5
+    assert agent_model_config("gpt-6-luna") == {"reasoning_effort": "none"}
