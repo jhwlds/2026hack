@@ -166,11 +166,10 @@ def test_a_later_family_model_gets_max_completion_tokens_and_no_temperature():
     ]
 
 
-# The simulated agents choose their actions through function tools. gpt-6-luna rejects tools unless reasoning_effort is
-# "none" ("Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'"). That value was
-# checked on gpt-6 only; GPT-5 accepts tools with its default reasoning, so it must be left alone.
-@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.0-luna", " GPT-6 ", "gpt-7", "gpt-10-large"])
-def test_gpt6_and_later_agents_turn_reasoning_off_so_function_tools_work(model):
+# The simulated agents choose their actions through function tools. These models reject tools unless reasoning_effort
+# is "none" ("Function tools with reasoning_effort are not supported ... set reasoning_effort to 'none'").
+@pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-6-luna", "gpt-6.0-luna", " GPT-6 ", "gpt-7", "gpt-10-large"])
+def test_models_that_reject_reasoning_with_tools_turn_reasoning_off(model):
     assert agent_model_config(model) == {"reasoning_effort": "none"}
 
 
